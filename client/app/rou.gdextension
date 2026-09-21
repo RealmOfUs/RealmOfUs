@@ -1,0 +1,14 @@
+[configuration]
+entry_symbol = "gdext_rust_init"
+compatibility_minimum = "4.7"
+reloadable = false
+
+[libraries]
+macos.debug.arm64 = "res://bin/librou_godot.dylib"
+macos.release.arm64 = "res://bin/librou_godot.dylib"
+macos.debug.x86_64 = "res://bin/librou_godot.dylib"
+macos.release.x86_64 = "res://bin/librou_godot.dylib"
+linux.debug.x86_64 = "res://bin/librou_godot.so"
+linux.release.x86_64 = "res://bin/librou_godot.so"
+windows.debug.x86_64 = "res://bin/rou_godot.dll"
+windows.release.x86_64 = "res://bin/rou_godot.dll"

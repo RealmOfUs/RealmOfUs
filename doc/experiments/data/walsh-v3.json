@@ -1,0 +1,97 @@
+{
+  "date": "2026-09-09",
+  "checks": {
+    "bed_distribution": {
+      "main@4.2m": 1,
+      "main@8.4m": 4,
+      "adu@8.4m": 2
+    },
+    "sofas_checked_from_mesh_centroids": 7,
+    "minimum_facing_dot": 0.9999998807907104,
+    "door_openings": 12,
+    "entities_validated": 55,
+    "runtime_bytes": 78700412,
+    "vertices": 1335674,
+    "max_entity_bytes": 3219960,
+    "max_entity_vertices": 54016
+  },
+  "archive": {
+    "bytes": 120186447,
+    "sha256": "0c9fb2d526d1068f07c068046bbecb3687bfb89202c35a2255cb5a712feff06b",
+    "reachable_glbs": 55,
+    "zip_crc": "pass"
+  },
+  "measurements": {
+    "quality": {
+      "cancelled": 0,
+      "first_ready_seconds": 2.340781,
+      "frame_ms_p50": 51.719,
+      "frame_ms_p95": 69.536,
+      "frame_ms_p99": 133.913,
+      "frames": 2388,
+      "godot": "4.7.2-stable (official)",
+      "gpu": "Apple M3 (Apple9)",
+      "import_ms_p95": 40.21,
+      "imports": 55,
+      "msaa": 2,
+      "realm": "/Users/zhixu/workspace/projects/RealmOfUs/dist/walsh-v3/macos/Villa Anahid.app/Contents/Resources/preview/realm.json",
+      "reflection_probes": 5,
+      "rejected": {},
+      "render_objects": 1671.0,
+      "render_primitives": 3593704.0,
+      "render_scale": 1.0,
+      "renderer": "forward_plus",
+      "sdfgi": true,
+      "seconds": 134.388264,
+      "ssil": true,
+      "static_memory_bytes": 0,
+      "unloads": 0,
+      "viewport": [
+        1920,
+        1080
+      ],
+      "visual_preset": "dusk",
+      "peak_rss_bytes": 364986368,
+      "rss_samples": 629,
+      "process_wall_seconds": 136.9321062080562,
+      "network_policy": "deny network*",
+      "cwd": "/tmp"
+    },
+    "performance": {
+      "cancelled": 0,
+      "first_ready_seconds": 2.686986,
+      "frame_ms_p50": 20.426,
+      "frame_ms_p95": 27.331,
+      "frame_ms_p99": 33.453,
+      "frames": 6190,
+      "godot": "4.7.2-stable (official)",
+      "gpu": "Apple M3 (Apple9)",
+      "import_ms_p95": 47.945,
+      "imports": 55,
+      "msaa": 1,
+      "realm": "/Users/zhixu/workspace/projects/RealmOfUs/dist/walsh-v3/macos/Villa Anahid.app/Contents/Resources/preview/realm.json",
+      "reflection_probes": 5,
+      "rejected": {},
+      "render_objects": 1675.0,
+      "render_primitives": 3593712.0,
+      "render_scale": 0.75,
+      "renderer": "forward_plus",
+      "sdfgi": false,
+      "seconds": 134.696379,
+      "ssil": false,
+      "static_memory_bytes": 0,
+      "unloads": 0,
+      "viewport": [
+        1920,
+        1080
+      ],
+      "visual_preset": "dusk",
+      "peak_rss_bytes": 483262464,
+      "rss_samples": 638,
+      "process_wall_seconds": 136.1741103748791,
+      "network_policy": "deny network*",
+      "cwd": "/tmp"
+    }
+  },
+  "renderer_notes": "132 seconds per complete 16-view tour; no FPS cap; network denied; captures inspected separately."
+}

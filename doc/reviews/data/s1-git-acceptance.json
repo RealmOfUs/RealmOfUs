@@ -1,0 +1,236 @@
+{
+  "date": "2026-09-14",
+  "scope": "S1 Git G1-G4; current Mac; local bare Git/LFS; no public P2P",
+  "platform": {
+    "system": "Darwin",
+    "version": "26.3",
+    "machine": "arm64",
+    "git": "git version 2.50.1 (Apple Git-155)",
+    "git_lfs": "git-lfs/3.6.1 (GitHub; darwin arm64; go 1.23.4)",
+    "godot": "4.7.2-stable (official)",
+    "blender": "5.2.1 LTS"
+  },
+  "commands_report": "build/s1-git/verification/run-20260914T075233760959Z/report.json",
+  "checks": [
+    {
+      "name": "build does not stage",
+      "passed": true
+    },
+    {
+      "name": "only Git owns history",
+      "passed": true
+    },
+    {
+      "name": "local caches ignored",
+      "passed": true
+    },
+    {
+      "name": "alice clone has no LFS payloads",
+      "passed": true
+    },
+    {
+      "name": "alice clone has metadata only",
+      "passed": true
+    },
+    {
+      "name": "bob clone has no LFS payloads",
+      "passed": true
+    },
+    {
+      "name": "bob clone has metadata only",
+      "passed": true
+    },
+    {
+      "name": "branch creation does not hydrate",
+      "passed": true
+    },
+    {
+      "name": "selection hydrates source and shared dependencies",
+      "passed": true
+    },
+    {
+      "name": "selection leaves far model cold",
+      "passed": true
+    },
+    {
+      "name": "hydration remains Git clean",
+      "passed": true
+    },
+    {
+      "name": "fresh clone restores original scenes and shared dependencies",
+      "passed": true
+    },
+    {
+      "name": "README-only commit keeps unstaged model edits",
+      "passed": true
+    },
+    {
+      "name": "fetch preserves author HEAD",
+      "passed": true
+    },
+    {
+      "name": "divergent merge stays pending",
+      "passed": true
+    },
+    {
+      "name": "merge preserves both Git parents",
+      "passed": true
+    },
+    {
+      "name": "semantic diff identifies both model contributions",
+      "passed": true
+    },
+    {
+      "name": "merge retains sparse-away entity",
+      "passed": true
+    },
+    {
+      "name": "view resolves symbolic revision to immutable OID",
+      "passed": true
+    },
+    {
+      "name": "view contains no authoring or Git dependency",
+      "passed": true
+    },
+    {
+      "name": "view preserves exact versions",
+      "passed": true
+    },
+    {
+      "name": "whole-world selection restores remaining source",
+      "passed": true
+    },
+    {
+      "name": "reversed range covers nine chunks",
+      "passed": true
+    },
+    {
+      "name": "Godot fixed-version workflow",
+      "passed": true
+    }
+  ],
+  "integration_check_count": 24,
+  "integration_command_count": 56,
+  "godot": {
+    "checks": 34,
+    "errors": [],
+    "godot": "4.7.2-stable (official)",
+    "initial": "7f7c5be232470cf5275c578fd3ab8ab6202e0129",
+    "status": "passed",
+    "updated": "bd52c15f3ceb0ae73a5b9bb260b0b7d2c5759547"
+  },
+  "versions": {
+    "initial": "7f7c5be232470cf5275c578fd3ab8ab6202e0129",
+    "notes": "8c3ac6e05dee104d699064e0bd09020fedb535e0",
+    "house": "7d7cae2f98dac1f8636ec17029a2f80186876b83",
+    "bench": "cf19f5bfd3e5b4140c2e49e3bc280e32ccf52a4d",
+    "merged": "bd52c15f3ceb0ae73a5b9bb260b0b7d2c5759547"
+  },
+  "blender_addon": {
+    "status": "passed",
+    "blender": "5.2.1 LTS",
+    "checks": [
+      "complete_source_multi_scene",
+      "multiple_entity_registration",
+      "explicit_placement",
+      "guarded_complete_source_save",
+      "placement_authority_on_reopen",
+      "commit_stales_session",
+      "branch_stales_session",
+      "placement_stales_session",
+      "source_stales_session",
+      "dependency_stales_session",
+      "existing_binding_dependencies_refresh",
+      "relative_dependency_paths",
+      "registration_preserves_placement",
+      "static_images_only",
+      "quaternion_root_rejected",
+      "missing_dependency_rejected",
+      "pointer_dependency_rejected"
+    ],
+    "addon_version": [
+      0,
+      3,
+      1
+    ],
+    "coverage": "ZIP contents, direct registration, domain checks; actual Preferences installation is recorded separately."
+  },
+  "blender_addon_report": "build/addon-0.3.1/authoring/authoring-report.json",
+  "python": {
+    "tests": 45,
+    "domain_tests_included": 29,
+    "status": "passed",
+    "log": "build/s1-git-python-tests-final.log"
+  },
+  "go": {
+    "race": "passed",
+    "vet": "passed"
+  },
+  "format": "passed",
+  "spatial": {
+    "python_profile_vectors": 33,
+    "position_vectors": 17,
+    "bounds_vectors": 13,
+    "catalog_vectors": 14,
+    "godot_assertions": 110,
+    "status": "passed"
+  },
+  "schemas": {
+    "schemas_valid": 4,
+    "real_project_binding_entity_inputs_valid": true
+  },
+  "deliverables": {
+    "cli": "build/bin/rou",
+    "addon": "dist/rou_authoring.zip",
+    "mac_app": "dist/viewer-git/macos/Realm of Us.app"
+  },
+  "mac_standalone": {
+    "status": "passed",
+    "app": "/Users/zhixu/workspace/projects/RealmOfUs/dist/viewer-git/macos/Realm of Us.app",
+    "checks": {
+      "fixed_commit": true,
+      "view_root": true,
+      "local_bridge": true,
+      "models_loaded": true,
+      "assets_valid": true,
+      "real_frames": true,
+      "screenshot": true,
+      "empty_authoring_path": true,
+      "no_source_or_git_data": true
+    },
+    "commit_oid": "bd52c15f3ceb0ae73a5b9bb260b0b7d2c5759547",
+    "seconds": 12.184928,
+    "imports": 3,
+    "frames": 1031,
+    "focused_frames": 1031,
+    "unfocused_frames": 0,
+    "foreground_measurement_valid": true,
+    "activation_requested": true,
+    "activation_result": "true",
+    "frame_ms_p50": 9.372,
+    "frame_ms_p95": 11.257,
+    "godot": "4.7.2-stable (official)",
+    "renderer": "forward_plus",
+    "gpu": "Apple M3 (Apple9)",
+    "screenshot": "/Users/zhixu/workspace/projects/RealmOfUs/build/s1-git/foreground-20260914T165303Z/standalone/viewer.png"
+  },
+  "mac_standalone_report": "build/s1-git/foreground-20260914T165303Z/standalone/acceptance.json",
+  "mac_performance_conclusion": "Passed for the current small Git collaboration fixture on Apple M3: both 36-second foreground runs had zero unfocused frames, P95 <= 33 ms and sampled peak RSS <= 2 GiB. Does not establish V3 house or large-world streaming performance.",
+  "previous_mac_standalone_report": "build/s1-git/mac-acceptance-foreground/acceptance.json",
+  "mac_foreground_performance": {
+    "status": "passed",
+    "report": "doc/reviews/data/s1-git-foreground-performance.json",
+    "run_count": 2
+  },
+  "previous_blender_addon_report": "build/git-authoring-addon-installed-final/authoring-report.json",
+  "blender_addon_installation": {
+    "status": "passed",
+    "addon_version": [
+      0,
+      3,
+      1
+    ],
+    "checks": 61,
+    "report": "doc/reviews/data/blender-addon-installation.json"
+  }
+}

@@ -1,0 +1,37 @@
+# Standalone nightly cargo-fuzz workspace, excluded from normal application builds.
+[package]
+name = "rou-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2024"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+rou-core = { path = "../crates/rou-core" }
+
+[workspace]
+members = ["."]
+
+[[bin]]
+name = "json_strict"
+path = "fuzz_targets/json_strict.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "glb_precheck"
+path = "fuzz_targets/glb_precheck.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "lfs_pointer"
+path = "fuzz_targets/lfs_pointer.rs"
+test = false
+doc = false
+bench = false

@@ -1,0 +1,13 @@
+schema_version = "1.0.0"
+id = "rou_blender"
+version = "0.4.0"
+name = "Realm of Us"
+tagline = "Author complete Git realm projects and local previews"
+maintainer = "Realm of Us contributors"
+type = "add-on"
+blender_version_min = "4.2.0"
+license = ["SPDX:GPL-3.0-or-later"]
+platforms = ["macos-arm64"]
+
+[permissions]
+files = "Read and save realm sources, metadata and local previews"

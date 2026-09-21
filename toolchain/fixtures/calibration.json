@@ -1,0 +1,2104 @@
+{
+  "manifest": {
+    "chunks": {
+      "-1,0,-1": [
+        "cross_chunk_pavilion",
+        "house_1_2",
+        "plaza",
+        "road_0_2",
+        "road_0_3",
+        "road_2_2",
+        "road_2_3",
+        "tree_00",
+        "tree_09"
+      ],
+      "-1,0,-2": [
+        "house_0_2",
+        "house_1_2",
+        "road_2_1",
+        "road_2_2"
+      ],
+      "-1,0,-3": [
+        "house_0_2",
+        "road_2_0",
+        "road_2_1"
+      ],
+      "-1,0,-4": [
+        "road_2_0"
+      ],
+      "-1,0,0": [
+        "house_2_2",
+        "plaza",
+        "road_0_2",
+        "road_0_3",
+        "road_2_3",
+        "road_2_4",
+        "tree_02",
+        "tree_05"
+      ],
+      "-1,0,1": [
+        "house_2_2",
+        "house_3_2",
+        "road_2_4",
+        "road_2_5"
+      ],
+      "-1,0,2": [
+        "house_3_2",
+        "road_2_5",
+        "road_2_6"
+      ],
+      "-1,0,3": [
+        "road_2_6"
+      ],
+      "-2,0,-1": [
+        "cross_chunk_pavilion",
+        "house_1_1",
+        "road_0_1",
+        "road_0_2",
+        "tree_08",
+        "tree_09"
+      ],
+      "-2,0,-2": [
+        "house_0_1",
+        "house_1_1"
+      ],
+      "-2,0,-3": [
+        "house_0_1"
+      ],
+      "-2,0,0": [
+        "house_2_1",
+        "road_0_1",
+        "road_0_2",
+        "tree_04",
+        "tree_05"
+      ],
+      "-2,0,1": [
+        "house_2_1",
+        "house_3_1"
+      ],
+      "-2,0,2": [
+        "house_3_1"
+      ],
+      "-3,0,-1": [
+        "house_1_0",
+        "road_0_0",
+        "road_0_1",
+        "tree_08"
+      ],
+      "-3,0,-2": [
+        "house_1_0"
+      ],
+      "-3,0,0": [
+        "house_2_0",
+        "road_0_0",
+        "road_0_1",
+        "tree_04"
+      ],
+      "-3,0,1": [
+        "house_2_0",
+        "house_3_0"
+      ],
+      "-3,0,2": [
+        "house_3_0"
+      ],
+      "-4,0,-1": [
+        "road_0_0"
+      ],
+      "-4,0,-4": [
+        "axis_probe"
+      ],
+      "-4,0,0": [
+        "road_0_0"
+      ],
+      "0,0,-1": [
+        "cross_chunk_pavilion",
+        "house_1_3",
+        "plaza",
+        "road_0_3",
+        "road_0_4",
+        "road_2_2",
+        "road_2_3",
+        "tree_01",
+        "tree_10"
+      ],
+      "0,0,-2": [
+        "house_0_3",
+        "house_1_3",
+        "road_2_1",
+        "road_2_2"
+      ],
+      "0,0,-3": [
+        "house_0_3",
+        "road_2_0",
+        "road_2_1"
+      ],
+      "0,0,-4": [
+        "road_2_0"
+      ],
+      "0,0,0": [
+        "house_2_3",
+        "plaza",
+        "road_0_3",
+        "road_0_4",
+        "road_2_3",
+        "road_2_4",
+        "tree_03",
+        "tree_06"
+      ],
+      "0,0,1": [
+        "house_2_3",
+        "house_3_3",
+        "road_2_4",
+        "road_2_5"
+      ],
+      "0,0,2": [
+        "house_3_3",
+        "road_2_5",
+        "road_2_6"
+      ],
+      "0,0,3": [
+        "road_2_6"
+      ],
+      "1,0,-1": [
+        "house_1_4",
+        "road_0_4",
+        "road_0_5",
+        "tree_10",
+        "tree_11"
+      ],
+      "1,0,-2": [
+        "house_0_4",
+        "house_1_4"
+      ],
+      "1,0,-3": [
+        "house_0_4"
+      ],
+      "1,0,0": [
+        "house_2_4",
+        "road_0_4",
+        "road_0_5",
+        "tree_06",
+        "tree_07"
+      ],
+      "1,0,1": [
+        "house_2_4"
+      ],
+      "2,0,-1": [
+        "house_1_5",
+        "road_0_5",
+        "road_0_6",
+        "tree_11"
+      ],
+      "2,0,-2": [
+        "house_0_5",
+        "house_1_5"
+      ],
+      "2,0,-3": [
+        "house_0_5"
+      ],
+      "2,0,0": [
+        "road_0_5",
+        "road_0_6",
+        "tree_07"
+      ],
+      "2,0,1": [
+        "house_3_5"
+      ],
+      "2,0,2": [
+        "house_3_5"
+      ],
+      "3,0,-1": [
+        "road_0_6"
+      ],
+      "3,0,0": [
+        "road_0_6"
+      ]
+    },
+    "entities": [
+      {
+        "asset": {
+          "bytes": 5380,
+          "path": "objects/e48e177dc696584f5a2aa8be0a3b871d35f9870037352f691f12afda6ba660e7.glb",
+          "sha256": "e48e177dc696584f5a2aa8be0a3b871d35f9870037352f691f12afda6ba660e7"
+        },
+        "bounds_mm": {
+          "max": [
+            -104000,
+            2000,
+            -97000
+          ],
+          "min": [
+            -105100,
+            0,
+            -100100
+          ]
+        },
+        "id": "axis_probe",
+        "label": "Axis probe / 1m X, 2m Y, 3m Z",
+        "offset_mm": [
+          23000,
+          0,
+          28000
+        ],
+        "owner_chunk": [
+          -4,
+          0,
+          -4
+        ],
+        "position_mm": [
+          -105000,
+          0,
+          -100000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 44180,
+          "path": "objects/642b0b1fda783cf048825dc834c2a4b62867b7ef25d17bd9a7186af6767ca6bf.glb",
+          "sha256": "642b0b1fda783cf048825dc834c2a4b62867b7ef25d17bd9a7186af6767ca6bf"
+        },
+        "bounds_mm": {
+          "max": [
+            8000,
+            6801,
+            -16500
+          ],
+          "min": [
+            -36000,
+            0,
+            -27500
+          ]
+        },
+        "id": "cross_chunk_pavilion",
+        "label": "Cross-chunk gallery",
+        "offset_mm": [
+          18000,
+          0,
+          10000
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          -1
+        ],
+        "position_mm": [
+          -14000,
+          0,
+          -22000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17528,
+          "path": "objects/8fa617a07db33bc01d8b6f11dfdade55a5275a42c07b83d75a1fa65044f52136.glb",
+          "sha256": "8fa617a07db33bc01d8b6f11dfdade55a5275a42c07b83d75a1fa65044f52136"
+        },
+        "bounds_mm": {
+          "max": [
+            -37000,
+            10700,
+            -59000
+          ],
+          "min": [
+            -59000,
+            0,
+            -81000
+          ]
+        },
+        "id": "house_0_1",
+        "label": "Atelier 1.2",
+        "offset_mm": [
+          16000,
+          0,
+          26000
+        ],
+        "owner_chunk": [
+          -2,
+          0,
+          -3
+        ],
+        "position_mm": [
+          -48000,
+          0,
+          -70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17756,
+          "path": "objects/a7d83c46a30f60dd05100357ca8f1576d4734c0d027b54a27af6f02d02613952.glb",
+          "sha256": "a7d83c46a30f60dd05100357ca8f1576d4734c0d027b54a27af6f02d02613952"
+        },
+        "bounds_mm": {
+          "max": [
+            -7000,
+            11900,
+            -59000
+          ],
+          "min": [
+            -29000,
+            0,
+            -81000
+          ]
+        },
+        "id": "house_0_2",
+        "label": "Atelier 1.3",
+        "offset_mm": [
+          14000,
+          0,
+          26000
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          -3
+        ],
+        "position_mm": [
+          -18000,
+          0,
+          -70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17508,
+          "path": "objects/c580ee9b783e58d4d5d29cd74078021154c99cf5d2cfc25ebd73019292c70f85.glb",
+          "sha256": "c580ee9b783e58d4d5d29cd74078021154c99cf5d2cfc25ebd73019292c70f85"
+        },
+        "bounds_mm": {
+          "max": [
+            29000,
+            9500,
+            -59000
+          ],
+          "min": [
+            7000,
+            0,
+            -81000
+          ]
+        },
+        "id": "house_0_3",
+        "label": "Atelier 1.4",
+        "offset_mm": [
+          18000,
+          0,
+          26000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          -3
+        ],
+        "position_mm": [
+          18000,
+          0,
+          -70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17560,
+          "path": "objects/b55761f9b59c49e646371664fc0e9c6d499f17e3342b6fd46ed4e2628d73fd39.glb",
+          "sha256": "b55761f9b59c49e646371664fc0e9c6d499f17e3342b6fd46ed4e2628d73fd39"
+        },
+        "bounds_mm": {
+          "max": [
+            59000,
+            10700,
+            -59000
+          ],
+          "min": [
+            37000,
+            0,
+            -81000
+          ]
+        },
+        "id": "house_0_4",
+        "label": "Atelier 1.5",
+        "offset_mm": [
+          16000,
+          0,
+          26000
+        ],
+        "owner_chunk": [
+          1,
+          0,
+          -3
+        ],
+        "position_mm": [
+          48000,
+          0,
+          -70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17560,
+          "path": "objects/04d7ba7998d662601df1695801d31d135c4d48c2a2b1297d081934f981a9edb9.glb",
+          "sha256": "04d7ba7998d662601df1695801d31d135c4d48c2a2b1297d081934f981a9edb9"
+        },
+        "bounds_mm": {
+          "max": [
+            89000,
+            11900,
+            -59000
+          ],
+          "min": [
+            67000,
+            0,
+            -81000
+          ]
+        },
+        "id": "house_0_5",
+        "label": "Atelier 1.6",
+        "offset_mm": [
+          14000,
+          0,
+          26000
+        ],
+        "owner_chunk": [
+          2,
+          0,
+          -3
+        ],
+        "position_mm": [
+          78000,
+          0,
+          -70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17508,
+          "path": "objects/88aa06b6e3914537dbbf9dd0756d3c383ac5dfbdc863e11bd2fb14e496162e19.glb",
+          "sha256": "88aa06b6e3914537dbbf9dd0756d3c383ac5dfbdc863e11bd2fb14e496162e19"
+        },
+        "bounds_mm": {
+          "max": [
+            -67000,
+            9500,
+            -29000
+          ],
+          "min": [
+            -89000,
+            0,
+            -51000
+          ]
+        },
+        "id": "house_1_0",
+        "label": "Atelier 2.1",
+        "offset_mm": [
+          18000,
+          0,
+          24000
+        ],
+        "owner_chunk": [
+          -3,
+          0,
+          -2
+        ],
+        "position_mm": [
+          -78000,
+          0,
+          -40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17560,
+          "path": "objects/5c9b3004d88a0a2c44b9e7fa6e2eb53d90439b182d415b06febe78c2e3c563d3.glb",
+          "sha256": "5c9b3004d88a0a2c44b9e7fa6e2eb53d90439b182d415b06febe78c2e3c563d3"
+        },
+        "bounds_mm": {
+          "max": [
+            -37000,
+            10700,
+            -29000
+          ],
+          "min": [
+            -59000,
+            0,
+            -51000
+          ]
+        },
+        "id": "house_1_1",
+        "label": "Atelier 2.2",
+        "offset_mm": [
+          16000,
+          0,
+          24000
+        ],
+        "owner_chunk": [
+          -2,
+          0,
+          -2
+        ],
+        "position_mm": [
+          -48000,
+          0,
+          -40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17756,
+          "path": "objects/1549a97b48623b4ab6bab9f428f278c53b113d0655d93c45b25ab8e6c87522c3.glb",
+          "sha256": "1549a97b48623b4ab6bab9f428f278c53b113d0655d93c45b25ab8e6c87522c3"
+        },
+        "bounds_mm": {
+          "max": [
+            -7000,
+            11900,
+            -29000
+          ],
+          "min": [
+            -29000,
+            0,
+            -51000
+          ]
+        },
+        "id": "house_1_2",
+        "label": "Atelier 2.3",
+        "offset_mm": [
+          14000,
+          0,
+          24000
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          -2
+        ],
+        "position_mm": [
+          -18000,
+          0,
+          -40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17508,
+          "path": "objects/86b336a091fd60d8152c2bf8d13f9a6fa201ae45868f17b2d7352387243a1c06.glb",
+          "sha256": "86b336a091fd60d8152c2bf8d13f9a6fa201ae45868f17b2d7352387243a1c06"
+        },
+        "bounds_mm": {
+          "max": [
+            29000,
+            9500,
+            -29000
+          ],
+          "min": [
+            7000,
+            0,
+            -51000
+          ]
+        },
+        "id": "house_1_3",
+        "label": "Atelier 2.4",
+        "offset_mm": [
+          18000,
+          0,
+          24000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          -2
+        ],
+        "position_mm": [
+          18000,
+          0,
+          -40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17560,
+          "path": "objects/684b384484071512a286733d5464fb907759487c1f00e881bbf06b6d832c50a8.glb",
+          "sha256": "684b384484071512a286733d5464fb907759487c1f00e881bbf06b6d832c50a8"
+        },
+        "bounds_mm": {
+          "max": [
+            59000,
+            10700,
+            -29000
+          ],
+          "min": [
+            37000,
+            0,
+            -51000
+          ]
+        },
+        "id": "house_1_4",
+        "label": "Atelier 2.5",
+        "offset_mm": [
+          16000,
+          0,
+          24000
+        ],
+        "owner_chunk": [
+          1,
+          0,
+          -2
+        ],
+        "position_mm": [
+          48000,
+          0,
+          -40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17560,
+          "path": "objects/bfcf6e1fd3baa0d25771da9e4aa81a7d4e5814d2381943f7bdeb11c2c1790f0b.glb",
+          "sha256": "bfcf6e1fd3baa0d25771da9e4aa81a7d4e5814d2381943f7bdeb11c2c1790f0b"
+        },
+        "bounds_mm": {
+          "max": [
+            89000,
+            11900,
+            -29000
+          ],
+          "min": [
+            67000,
+            0,
+            -51000
+          ]
+        },
+        "id": "house_1_5",
+        "label": "Atelier 2.6",
+        "offset_mm": [
+          14000,
+          0,
+          24000
+        ],
+        "owner_chunk": [
+          2,
+          0,
+          -2
+        ],
+        "position_mm": [
+          78000,
+          0,
+          -40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17508,
+          "path": "objects/e9b16ff94ff202a7b61276445fe122448424cde40b375213c68bf099c18058d0.glb",
+          "sha256": "e9b16ff94ff202a7b61276445fe122448424cde40b375213c68bf099c18058d0"
+        },
+        "bounds_mm": {
+          "max": [
+            -67000,
+            9500,
+            51000
+          ],
+          "min": [
+            -89000,
+            0,
+            29000
+          ]
+        },
+        "id": "house_2_0",
+        "label": "Atelier 3.1",
+        "offset_mm": [
+          18000,
+          0,
+          8000
+        ],
+        "owner_chunk": [
+          -3,
+          0,
+          1
+        ],
+        "position_mm": [
+          -78000,
+          0,
+          40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17560,
+          "path": "objects/dd189a38dbe3b923e03ef22a1536ae171b22beb8ae9f3798f766485f612d4edf.glb",
+          "sha256": "dd189a38dbe3b923e03ef22a1536ae171b22beb8ae9f3798f766485f612d4edf"
+        },
+        "bounds_mm": {
+          "max": [
+            -37000,
+            10700,
+            51000
+          ],
+          "min": [
+            -59000,
+            0,
+            29000
+          ]
+        },
+        "id": "house_2_1",
+        "label": "Atelier 3.2",
+        "offset_mm": [
+          16000,
+          0,
+          8000
+        ],
+        "owner_chunk": [
+          -2,
+          0,
+          1
+        ],
+        "position_mm": [
+          -48000,
+          0,
+          40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17756,
+          "path": "objects/04f4401352e79caa137b6e5da43de8e75549d752a1c882ea296593360610ddfd.glb",
+          "sha256": "04f4401352e79caa137b6e5da43de8e75549d752a1c882ea296593360610ddfd"
+        },
+        "bounds_mm": {
+          "max": [
+            -7000,
+            11900,
+            51000
+          ],
+          "min": [
+            -29000,
+            0,
+            29000
+          ]
+        },
+        "id": "house_2_2",
+        "label": "Atelier 3.3",
+        "offset_mm": [
+          14000,
+          0,
+          8000
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          1
+        ],
+        "position_mm": [
+          -18000,
+          0,
+          40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17508,
+          "path": "objects/1451c1f67f6277207d2c1d854ac1a33f22abcc549ba2c74ca995e6cd3c1d83b5.glb",
+          "sha256": "1451c1f67f6277207d2c1d854ac1a33f22abcc549ba2c74ca995e6cd3c1d83b5"
+        },
+        "bounds_mm": {
+          "max": [
+            29000,
+            9500,
+            51000
+          ],
+          "min": [
+            7000,
+            0,
+            29000
+          ]
+        },
+        "id": "house_2_3",
+        "label": "Atelier 3.4",
+        "offset_mm": [
+          18000,
+          0,
+          8000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          1
+        ],
+        "position_mm": [
+          18000,
+          0,
+          40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17560,
+          "path": "objects/280faf4535e005773967a799375f615619c152f920eace26c8c659a07d3c256b.glb",
+          "sha256": "280faf4535e005773967a799375f615619c152f920eace26c8c659a07d3c256b"
+        },
+        "bounds_mm": {
+          "max": [
+            59000,
+            10700,
+            51000
+          ],
+          "min": [
+            37000,
+            0,
+            29000
+          ]
+        },
+        "id": "house_2_4",
+        "label": "Atelier 3.5",
+        "offset_mm": [
+          16000,
+          0,
+          8000
+        ],
+        "owner_chunk": [
+          1,
+          0,
+          1
+        ],
+        "position_mm": [
+          48000,
+          0,
+          40000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17508,
+          "path": "objects/cbe0a0a932a155974f748fd9535a9fc7fe3f05604ec60c5b661433f9c0243884.glb",
+          "sha256": "cbe0a0a932a155974f748fd9535a9fc7fe3f05604ec60c5b661433f9c0243884"
+        },
+        "bounds_mm": {
+          "max": [
+            -67000,
+            9500,
+            81000
+          ],
+          "min": [
+            -89000,
+            0,
+            59000
+          ]
+        },
+        "id": "house_3_0",
+        "label": "Atelier 4.1",
+        "offset_mm": [
+          18000,
+          0,
+          6000
+        ],
+        "owner_chunk": [
+          -3,
+          0,
+          2
+        ],
+        "position_mm": [
+          -78000,
+          0,
+          70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17560,
+          "path": "objects/96309b96230906c75752b2e19b367d786ebd18e8192addf5c16a1d15b768d07e.glb",
+          "sha256": "96309b96230906c75752b2e19b367d786ebd18e8192addf5c16a1d15b768d07e"
+        },
+        "bounds_mm": {
+          "max": [
+            -37000,
+            10700,
+            81000
+          ],
+          "min": [
+            -59000,
+            0,
+            59000
+          ]
+        },
+        "id": "house_3_1",
+        "label": "Atelier 4.2",
+        "offset_mm": [
+          16000,
+          0,
+          6000
+        ],
+        "owner_chunk": [
+          -2,
+          0,
+          2
+        ],
+        "position_mm": [
+          -48000,
+          0,
+          70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17756,
+          "path": "objects/21e105e55478d9b269ed94d22d67564fceea60ef28d08182b534dbb64f0d2f88.glb",
+          "sha256": "21e105e55478d9b269ed94d22d67564fceea60ef28d08182b534dbb64f0d2f88"
+        },
+        "bounds_mm": {
+          "max": [
+            -7000,
+            11900,
+            81000
+          ],
+          "min": [
+            -29000,
+            0,
+            59000
+          ]
+        },
+        "id": "house_3_2",
+        "label": "Atelier 4.3",
+        "offset_mm": [
+          14000,
+          0,
+          6000
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          2
+        ],
+        "position_mm": [
+          -18000,
+          0,
+          70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17508,
+          "path": "objects/58d4037853c21d8796f082a05c33daa1b3996dc3583728d8e6f4f9b660bbb9ea.glb",
+          "sha256": "58d4037853c21d8796f082a05c33daa1b3996dc3583728d8e6f4f9b660bbb9ea"
+        },
+        "bounds_mm": {
+          "max": [
+            29000,
+            9500,
+            81000
+          ],
+          "min": [
+            7000,
+            0,
+            59000
+          ]
+        },
+        "id": "house_3_3",
+        "label": "Atelier 4.4",
+        "offset_mm": [
+          18000,
+          0,
+          6000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          2
+        ],
+        "position_mm": [
+          18000,
+          0,
+          70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 17560,
+          "path": "objects/ea0276998ae611f26b67f7137c91abb9ae052b2ecd6f897bf017141f04317f91.glb",
+          "sha256": "ea0276998ae611f26b67f7137c91abb9ae052b2ecd6f897bf017141f04317f91"
+        },
+        "bounds_mm": {
+          "max": [
+            89000,
+            11900,
+            81000
+          ],
+          "min": [
+            67000,
+            0,
+            59000
+          ]
+        },
+        "id": "house_3_5",
+        "label": "Atelier 4.6",
+        "offset_mm": [
+          14000,
+          0,
+          6000
+        ],
+        "owner_chunk": [
+          2,
+          0,
+          2
+        ],
+        "position_mm": [
+          78000,
+          0,
+          70000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 28296,
+          "path": "objects/703434fb86c60c70fea951ca4f2e0c9984ba9601a5b3acdb28558f87ebe64665.glb",
+          "sha256": "703434fb86c60c70fea951ca4f2e0c9984ba9601a5b3acdb28558f87ebe64665"
+        },
+        "bounds_mm": {
+          "max": [
+            14000,
+            4151,
+            14000
+          ],
+          "min": [
+            -14000,
+            0,
+            -14000
+          ]
+        },
+        "id": "plaza",
+        "label": "Commons / fountain",
+        "offset_mm": [
+          0,
+          0,
+          0
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          0
+        ],
+        "position_mm": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5772,
+          "path": "objects/3d35a8cf5a2fdac1da3b6720ee7f42cbbf3854312314e45bcb9cd4aabb72a0f6.glb",
+          "sha256": "3d35a8cf5a2fdac1da3b6720ee7f42cbbf3854312314e45bcb9cd4aabb72a0f6"
+        },
+        "bounds_mm": {
+          "max": [
+            -70000,
+            345,
+            5801
+          ],
+          "min": [
+            -98000,
+            0,
+            -5801
+          ]
+        },
+        "id": "road_0_0",
+        "label": "Promenade 0 / 0",
+        "offset_mm": [
+          12000,
+          0,
+          0
+        ],
+        "owner_chunk": [
+          -3,
+          0,
+          0
+        ],
+        "position_mm": [
+          -84000,
+          0,
+          0
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/42cefc07670980f35f6d70bc2cc7992b14be4519f1a4bea1f3666e4427105f8a.glb",
+          "sha256": "42cefc07670980f35f6d70bc2cc7992b14be4519f1a4bea1f3666e4427105f8a"
+        },
+        "bounds_mm": {
+          "max": [
+            -42000,
+            345,
+            5801
+          ],
+          "min": [
+            -70000,
+            0,
+            -5801
+          ]
+        },
+        "id": "road_0_1",
+        "label": "Promenade 0 / 1",
+        "offset_mm": [
+          8000,
+          0,
+          0
+        ],
+        "owner_chunk": [
+          -2,
+          0,
+          0
+        ],
+        "position_mm": [
+          -56000,
+          0,
+          0
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/addfd4539d1d9f8d2c028b3b26bb401757f88380a3ec37a546ab6ebc1adc5550.glb",
+          "sha256": "addfd4539d1d9f8d2c028b3b26bb401757f88380a3ec37a546ab6ebc1adc5550"
+        },
+        "bounds_mm": {
+          "max": [
+            -14000,
+            345,
+            5801
+          ],
+          "min": [
+            -42000,
+            0,
+            -5801
+          ]
+        },
+        "id": "road_0_2",
+        "label": "Promenade 0 / 2",
+        "offset_mm": [
+          4000,
+          0,
+          0
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          0
+        ],
+        "position_mm": [
+          -28000,
+          0,
+          0
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/4c060feecc4f3971ad8eb16577bcc3f703d38ee316fe6c91286b524c2186f201.glb",
+          "sha256": "4c060feecc4f3971ad8eb16577bcc3f703d38ee316fe6c91286b524c2186f201"
+        },
+        "bounds_mm": {
+          "max": [
+            14000,
+            345,
+            5801
+          ],
+          "min": [
+            -14000,
+            0,
+            -5801
+          ]
+        },
+        "id": "road_0_3",
+        "label": "Promenade 0 / 3",
+        "offset_mm": [
+          0,
+          0,
+          0
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          0
+        ],
+        "position_mm": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/79da9cf1d4604ba2f64d7ec1798b45bb4ebe4ca01c6e07a43536ba1b83940c37.glb",
+          "sha256": "79da9cf1d4604ba2f64d7ec1798b45bb4ebe4ca01c6e07a43536ba1b83940c37"
+        },
+        "bounds_mm": {
+          "max": [
+            42000,
+            345,
+            5801
+          ],
+          "min": [
+            14000,
+            0,
+            -5801
+          ]
+        },
+        "id": "road_0_4",
+        "label": "Promenade 0 / 4",
+        "offset_mm": [
+          28000,
+          0,
+          0
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          0
+        ],
+        "position_mm": [
+          28000,
+          0,
+          0
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/cd260ab9bbcc0af45c8f5ccb60570fa51d58541b78852b8e227cce3beb0e124d.glb",
+          "sha256": "cd260ab9bbcc0af45c8f5ccb60570fa51d58541b78852b8e227cce3beb0e124d"
+        },
+        "bounds_mm": {
+          "max": [
+            70000,
+            345,
+            5801
+          ],
+          "min": [
+            42000,
+            0,
+            -5801
+          ]
+        },
+        "id": "road_0_5",
+        "label": "Promenade 0 / 5",
+        "offset_mm": [
+          24000,
+          0,
+          0
+        ],
+        "owner_chunk": [
+          1,
+          0,
+          0
+        ],
+        "position_mm": [
+          56000,
+          0,
+          0
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/14901861ad650d9c9a46549bdbe303b9a24d570bb62183674ddb0407dc995adf.glb",
+          "sha256": "14901861ad650d9c9a46549bdbe303b9a24d570bb62183674ddb0407dc995adf"
+        },
+        "bounds_mm": {
+          "max": [
+            98000,
+            345,
+            5801
+          ],
+          "min": [
+            70000,
+            0,
+            -5801
+          ]
+        },
+        "id": "road_0_6",
+        "label": "Promenade 0 / 6",
+        "offset_mm": [
+          20000,
+          0,
+          0
+        ],
+        "owner_chunk": [
+          2,
+          0,
+          0
+        ],
+        "position_mm": [
+          84000,
+          0,
+          0
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/1d96e2f1b1bbce40090b3bccc22f62b71c74966fbd7e8837baaed5e4c05081f0.glb",
+          "sha256": "1d96e2f1b1bbce40090b3bccc22f62b71c74966fbd7e8837baaed5e4c05081f0"
+        },
+        "bounds_mm": {
+          "max": [
+            5801,
+            345,
+            -70000
+          ],
+          "min": [
+            -5801,
+            0,
+            -98000
+          ]
+        },
+        "id": "road_2_0",
+        "label": "Promenade 2 / 0",
+        "offset_mm": [
+          0,
+          0,
+          12000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          -3
+        ],
+        "position_mm": [
+          0,
+          0,
+          -84000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/94ff3f44364114c8aec34891270a12a61f761d00af144ead9a517407be335be7.glb",
+          "sha256": "94ff3f44364114c8aec34891270a12a61f761d00af144ead9a517407be335be7"
+        },
+        "bounds_mm": {
+          "max": [
+            5801,
+            345,
+            -42000
+          ],
+          "min": [
+            -5801,
+            0,
+            -70000
+          ]
+        },
+        "id": "road_2_1",
+        "label": "Promenade 2 / 1",
+        "offset_mm": [
+          0,
+          0,
+          8000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          -2
+        ],
+        "position_mm": [
+          0,
+          0,
+          -56000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/65006ce40ddc474dccb8294d616e2e26d26393de87531ac203d7860f5e3448fc.glb",
+          "sha256": "65006ce40ddc474dccb8294d616e2e26d26393de87531ac203d7860f5e3448fc"
+        },
+        "bounds_mm": {
+          "max": [
+            5801,
+            345,
+            -14000
+          ],
+          "min": [
+            -5801,
+            0,
+            -42000
+          ]
+        },
+        "id": "road_2_2",
+        "label": "Promenade 2 / 2",
+        "offset_mm": [
+          0,
+          0,
+          4000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          -1
+        ],
+        "position_mm": [
+          0,
+          0,
+          -28000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/8a7b429050a138d187be717a0e5eb723d1ed6c7481906c5ac7f2a70a3c0e94ba.glb",
+          "sha256": "8a7b429050a138d187be717a0e5eb723d1ed6c7481906c5ac7f2a70a3c0e94ba"
+        },
+        "bounds_mm": {
+          "max": [
+            5801,
+            345,
+            14000
+          ],
+          "min": [
+            -5801,
+            0,
+            -14000
+          ]
+        },
+        "id": "road_2_3",
+        "label": "Promenade 2 / 3",
+        "offset_mm": [
+          0,
+          0,
+          0
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          0
+        ],
+        "position_mm": [
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/e295f4502170e5d9518c3abbce9119a650e92d834a272f5376e26b789289f338.glb",
+          "sha256": "e295f4502170e5d9518c3abbce9119a650e92d834a272f5376e26b789289f338"
+        },
+        "bounds_mm": {
+          "max": [
+            5801,
+            345,
+            42000
+          ],
+          "min": [
+            -5801,
+            0,
+            14000
+          ]
+        },
+        "id": "road_2_4",
+        "label": "Promenade 2 / 4",
+        "offset_mm": [
+          0,
+          0,
+          28000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          0
+        ],
+        "position_mm": [
+          0,
+          0,
+          28000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/ca26ef5a728503a5a1287579df38fbb350310cc30173ffc81802e7c1608df60f.glb",
+          "sha256": "ca26ef5a728503a5a1287579df38fbb350310cc30173ffc81802e7c1608df60f"
+        },
+        "bounds_mm": {
+          "max": [
+            5801,
+            345,
+            70000
+          ],
+          "min": [
+            -5801,
+            0,
+            42000
+          ]
+        },
+        "id": "road_2_5",
+        "label": "Promenade 2 / 5",
+        "offset_mm": [
+          0,
+          0,
+          24000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          1
+        ],
+        "position_mm": [
+          0,
+          0,
+          56000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 5784,
+          "path": "objects/6053db63397ca19864ffd4377276490c3836fb1abbf78766779cd9349314ec1a.glb",
+          "sha256": "6053db63397ca19864ffd4377276490c3836fb1abbf78766779cd9349314ec1a"
+        },
+        "bounds_mm": {
+          "max": [
+            5801,
+            345,
+            98000
+          ],
+          "min": [
+            -5801,
+            0,
+            70000
+          ]
+        },
+        "id": "road_2_6",
+        "label": "Promenade 2 / 6",
+        "offset_mm": [
+          0,
+          0,
+          20000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          2
+        ],
+        "position_mm": [
+          0,
+          0,
+          84000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9316,
+          "path": "objects/4df2bfb163f6e238925aeb4b856dbad162fb1dfa9a60b392cd7a57b797cd75cf.glb",
+          "sha256": "4df2bfb163f6e238925aeb4b856dbad162fb1dfa9a60b392cd7a57b797cd75cf"
+        },
+        "bounds_mm": {
+          "max": [
+            -5848,
+            9450,
+            -5992
+          ],
+          "min": [
+            -12152,
+            0,
+            -12200
+          ]
+        },
+        "id": "tree_00",
+        "label": "Garden tree 1",
+        "offset_mm": [
+          23000,
+          0,
+          23000
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          -1
+        ],
+        "position_mm": [
+          -9000,
+          0,
+          -9000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/e97f82853d9dc7c3b786ad5566299ce5b721e7f5e7b6da96e50336a2a8413c59.glb",
+          "sha256": "e97f82853d9dc7c3b786ad5566299ce5b721e7f5e7b6da96e50336a2a8413c59"
+        },
+        "bounds_mm": {
+          "max": [
+            12152,
+            9450,
+            -5992
+          ],
+          "min": [
+            5848,
+            0,
+            -12200
+          ]
+        },
+        "id": "tree_01",
+        "label": "Garden tree 2",
+        "offset_mm": [
+          9000,
+          0,
+          23000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          -1
+        ],
+        "position_mm": [
+          9000,
+          0,
+          -9000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/db3702d830e4bb290025f2804f0ab775b6614d32d9573627690061d1154e1917.glb",
+          "sha256": "db3702d830e4bb290025f2804f0ab775b6614d32d9573627690061d1154e1917"
+        },
+        "bounds_mm": {
+          "max": [
+            -5848,
+            9450,
+            12008
+          ],
+          "min": [
+            -12152,
+            0,
+            5800
+          ]
+        },
+        "id": "tree_02",
+        "label": "Garden tree 3",
+        "offset_mm": [
+          23000,
+          0,
+          9000
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          0
+        ],
+        "position_mm": [
+          -9000,
+          0,
+          9000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/8978478d84554ab2a1250cc425dbea480f6d5afcfc913bd83caeda3c734132d9.glb",
+          "sha256": "8978478d84554ab2a1250cc425dbea480f6d5afcfc913bd83caeda3c734132d9"
+        },
+        "bounds_mm": {
+          "max": [
+            12152,
+            9450,
+            12008
+          ],
+          "min": [
+            5848,
+            0,
+            5800
+          ]
+        },
+        "id": "tree_03",
+        "label": "Garden tree 4",
+        "offset_mm": [
+          9000,
+          0,
+          9000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          0
+        ],
+        "position_mm": [
+          9000,
+          0,
+          9000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/2191a45e8763e5b7d95b2754a32b429a85375850aa5005c0e700dd35788767fe.glb",
+          "sha256": "2191a45e8763e5b7d95b2754a32b429a85375850aa5005c0e700dd35788767fe"
+        },
+        "bounds_mm": {
+          "max": [
+            -60848,
+            9450,
+            21008
+          ],
+          "min": [
+            -67152,
+            0,
+            14800
+          ]
+        },
+        "id": "tree_04",
+        "label": "Garden tree 5",
+        "offset_mm": [
+          0,
+          0,
+          18000
+        ],
+        "owner_chunk": [
+          -2,
+          0,
+          0
+        ],
+        "position_mm": [
+          -64000,
+          0,
+          18000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/ef08e34b3cccccf34c1082c560166822155ec9d0fdcd1dfd64b173b413ae7627.glb",
+          "sha256": "ef08e34b3cccccf34c1082c560166822155ec9d0fdcd1dfd64b173b413ae7627"
+        },
+        "bounds_mm": {
+          "max": [
+            -28848,
+            9450,
+            21008
+          ],
+          "min": [
+            -35152,
+            0,
+            14800
+          ]
+        },
+        "id": "tree_05",
+        "label": "Garden tree 6",
+        "offset_mm": [
+          0,
+          0,
+          18000
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          0
+        ],
+        "position_mm": [
+          -32000,
+          0,
+          18000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/75d866be6f64d7c735c22e8fc80f978efa3463ae68b9bba5005a2484430846b0.glb",
+          "sha256": "75d866be6f64d7c735c22e8fc80f978efa3463ae68b9bba5005a2484430846b0"
+        },
+        "bounds_mm": {
+          "max": [
+            35152,
+            9450,
+            21008
+          ],
+          "min": [
+            28848,
+            0,
+            14800
+          ]
+        },
+        "id": "tree_06",
+        "label": "Garden tree 7",
+        "offset_mm": [
+          0,
+          0,
+          18000
+        ],
+        "owner_chunk": [
+          1,
+          0,
+          0
+        ],
+        "position_mm": [
+          32000,
+          0,
+          18000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/cc5dca79c6169ab56a4bf0d78b85a9e991ae1cd57108871b1d3e0deca348ba6a.glb",
+          "sha256": "cc5dca79c6169ab56a4bf0d78b85a9e991ae1cd57108871b1d3e0deca348ba6a"
+        },
+        "bounds_mm": {
+          "max": [
+            67152,
+            9450,
+            21008
+          ],
+          "min": [
+            60848,
+            0,
+            14800
+          ]
+        },
+        "id": "tree_07",
+        "label": "Garden tree 8",
+        "offset_mm": [
+          0,
+          0,
+          18000
+        ],
+        "owner_chunk": [
+          2,
+          0,
+          0
+        ],
+        "position_mm": [
+          64000,
+          0,
+          18000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/edfbb3892cf9eab3dcf63aac63220409dba9d673e3a030fb11844285399383dd.glb",
+          "sha256": "edfbb3892cf9eab3dcf63aac63220409dba9d673e3a030fb11844285399383dd"
+        },
+        "bounds_mm": {
+          "max": [
+            -60848,
+            9450,
+            -14992
+          ],
+          "min": [
+            -67152,
+            0,
+            -21201
+          ]
+        },
+        "id": "tree_08",
+        "label": "Garden tree 9",
+        "offset_mm": [
+          0,
+          0,
+          14000
+        ],
+        "owner_chunk": [
+          -2,
+          0,
+          -1
+        ],
+        "position_mm": [
+          -64000,
+          0,
+          -18000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/1055c9bff5d74bf9ef600ecb2919f4058d9e8c9b5552692bdce1519d4141be24.glb",
+          "sha256": "1055c9bff5d74bf9ef600ecb2919f4058d9e8c9b5552692bdce1519d4141be24"
+        },
+        "bounds_mm": {
+          "max": [
+            -28848,
+            9450,
+            -14992
+          ],
+          "min": [
+            -35152,
+            0,
+            -21201
+          ]
+        },
+        "id": "tree_09",
+        "label": "Garden tree 10",
+        "offset_mm": [
+          0,
+          0,
+          14000
+        ],
+        "owner_chunk": [
+          -1,
+          0,
+          -1
+        ],
+        "position_mm": [
+          -32000,
+          0,
+          -18000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/96a200966c00a7f6caaed4b05445a98e433d17510036780dbf36ae517c359553.glb",
+          "sha256": "96a200966c00a7f6caaed4b05445a98e433d17510036780dbf36ae517c359553"
+        },
+        "bounds_mm": {
+          "max": [
+            35152,
+            9450,
+            -14992
+          ],
+          "min": [
+            28848,
+            0,
+            -21201
+          ]
+        },
+        "id": "tree_10",
+        "label": "Garden tree 11",
+        "offset_mm": [
+          0,
+          0,
+          14000
+        ],
+        "owner_chunk": [
+          1,
+          0,
+          -1
+        ],
+        "position_mm": [
+          32000,
+          0,
+          -18000
+        ]
+      },
+      {
+        "asset": {
+          "bytes": 9332,
+          "path": "objects/f5cead25fa56398db356dcec55a89b17a16af69a783140909a58200405950039.glb",
+          "sha256": "f5cead25fa56398db356dcec55a89b17a16af69a783140909a58200405950039"
+        },
+        "bounds_mm": {
+          "max": [
+            67152,
+            9450,
+            -14992
+          ],
+          "min": [
+            60848,
+            0,
+            -21201
+          ]
+        },
+        "id": "tree_11",
+        "label": "Garden tree 12",
+        "offset_mm": [
+          0,
+          0,
+          14000
+        ],
+        "owner_chunk": [
+          2,
+          0,
+          -1
+        ],
+        "position_mm": [
+          64000,
+          0,
+          -18000
+        ]
+      }
+    ],
+    "format": "rou-preview/0.1",
+    "index_complete": true,
+    "profile": {
+      "chunk_size_mm": [
+        32000,
+        32000,
+        32000
+      ],
+      "handedness": "right",
+      "id": "bounded-cartesian-v1-experiment",
+      "max_chunk": [
+        4,
+        2,
+        4
+      ],
+      "min_chunk": [
+        -4,
+        -2,
+        -4
+      ],
+      "origin_mm": [
+        0,
+        0,
+        0
+      ],
+      "placement_unit_mm": 1,
+      "units": "meter",
+      "up": "Y"
+    },
+    "profile_hash": "c5ea37e2ce31d6894d505e45475b8791c530767b8bd7d81637bc16e5df4a1f97"
+  },
+  "observations": [
+    {
+      "look_at": [
+        0,
+        2,
+        0
+      ],
+      "name": "Welcome plaza",
+      "position": [
+        30,
+        26,
+        44
+      ]
+    },
+    {
+      "look_at": [
+        -14,
+        3,
+        -28
+      ],
+      "name": "Cross-chunk pavilion",
+      "position": [
+        -30,
+        18,
+        -55
+      ]
+    },
+    {
+      "look_at": [
+        64,
+        2,
+        0
+      ],
+      "name": "East neighborhood",
+      "position": [
+        92,
+        24,
+        40
+      ]
+    },
+    {
+      "look_at": [
+        105,
+        4,
+        95
+      ],
+      "name": "Empty frontier",
+      "position": [
+        112,
+        28,
+        110
+      ]
+    }
+  ]
+}

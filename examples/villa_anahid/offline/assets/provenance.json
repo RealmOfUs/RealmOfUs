@@ -1,0 +1,12 @@
+{
+  "asset": "champagne-onyx-v1.png",
+  "origin": "Built-in imagegen tool",
+  "generated_for": "Realm of Us / Walsh offline study",
+  "role": "Flat onyx base-color texture only",
+  "size": [
+    1254,
+    1254
+  ],
+  "sha256": "00634979982af159cf8c5845218c1de17b86c71ad415fceaa8b9c07bbe0d8004",
+  "prompt": "onyx-prompt.txt"
+}

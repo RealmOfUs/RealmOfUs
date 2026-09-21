@@ -1,0 +1,8 @@
+; Minimal headless validation project. The interactive viewer lives in app/.
+config_version=5
+
+[application]
+config/name="Realm of Us protocol checks"
+
+[rendering]
+renderer/rendering_method="gl_compatibility"

@@ -1,0 +1,56 @@
+{
+  "status": "passed",
+  "checked_at": "2026-09-10T06:22:02.034090+00:00",
+  "scope": "S1.1 local spatial contract; no rendering, source assets, repository or network required",
+  "python": "3.14.3",
+  "jsonschema": "4.26.0",
+  "godot": "4.7.2.stable.official.ed1daf0bf",
+  "cases": {
+    "profiles": 33,
+    "positions": 17,
+    "bounds": 13,
+    "catalogs": 14
+  },
+  "godot_assertions": 110,
+  "profile_hash": "c5ea37e2ce31d6894d505e45475b8791c530767b8bd7d81637bc16e5df4a1f97",
+  "file_sha256": {
+    "protocol/spec/s1-preview.zh-CN.md": "9ff7f5f5e089296b05edfc2ac4a3ca3180a1870e85d6fad2c6e771aa68f71718",
+    "protocol/schemas/realm-profile.schema.json": "2bc7e53242e3472d3a7a0526e8575d8d95d2e0fec7a2cb08cde7b7001b1ac9be",
+    "protocol/vectors/spatial.json": "f4e3b62bfbf7c013e166fe1de2f82a15e81f78534e8a290d87652858f7b7d01a",
+    "toolchain/realm_format.py": "1b8390a4e1aeca5088d78bde84bbe0dc3089619dae62d3d32f0ba21e0f1f4c65",
+    "client/app/realm_validation.gd": "70ff0b787ab419c3a2fb9b23a6e3d9b7211eb91c996681c3734972c031834868",
+    "toolchain/tests/test_spatial_contract.py": "b600c45c0aef65119a73da985218c1937ca8505f1c5ada3875326feffe684cf3",
+    "client/tests/spatial.gd": "9cec557e60ca6f92dc55e6dbc1b59329e598fbca6c4d05683f6d050791740ea1",
+    "toolchain/build/verify_spatial.py": "04a5b0c96935888ed4163aa83618cb5f5998b09d0915f5950f9c63f7a63e810e",
+    "toolchain/build/verify_s1.py": "0aeedee2af7d417f3f66c53cba039df41155dd208a384db0008de99b8690b441",
+    "client/tests/verify.gd": "53bb7dcee71bcc975850a3858757631f0e43e2606e3425e809f21569a1d97bb5",
+    "toolchain/tests/test_realm_format.py": "0e32b9c907ede76374f913b0aa28d9413248b8aaf42c7f285ef3b2031c7e07c6",
+    "client/tests/lifecycle.gd": "c16c42fd06e3d1ee13fa58e67826b6c97f345efeefa67e563776c4540e68cc1b"
+  },
+  "python_regression": {
+    "test_groups": 12,
+    "skipped": 0,
+    "passed": true
+  },
+  "integration": {
+    "godot_assertions": 706,
+    "cancelled": 55,
+    "unloaded": 55,
+    "expected_tampered_asset_rejected": true,
+    "historical_grid_comparison_unchanged": true,
+    "render_benchmark_rerun": false
+  },
+  "logs_sha256": {
+    "build/s1/spatial-checks/python.log": "75e3dbffc315aabd417cd27915a0f2c31fcf5e6613ca6dc508f0fbad59e547a1",
+    "build/s1/spatial-checks/godot.log": "c4debdfc4b775757e205dd8255c23482c31d7ccb65b06272581e3226d14c5a6a",
+    "build/s1/checks/godot-checks.log": "f9180c08ceb31ec923e9fc014aedd189ddd2e98d0ceb3f2f1ef7b19e9bf143ad",
+    "build/s1/checks/lifecycle.log": "56abf36ff6707d8749126f9bfe23fdcfb1586e6e34e16b3dfb7a803ae52ae254"
+  },
+  "old_doc_sha256": {
+    "doc/old-doc/Realm_of_Us_Architecture.en.md": "05fcf9d012c71d0d53b403733bfe978f1f6e8cb672eb96c0808744333c9c4709",
+    "doc/old-doc/Realm_of_Us_Architecture.zh-CN.md": "8bd93263c4994c573c4e942172a8652f1ea96f3de68e2e35ebf8d7fe454f2943",
+    "doc/old-doc/Realm_of_Us_Design.zh-CN.md": "d5bcafa7edec4728ccfe17785992995cc074a76ddac98af1811c9de561508203",
+    "doc/old-doc/README.md": "229a2bfa598fb640f789acf20a9cbd9ac876b5e9e1c35f66a646d3148129df04",
+    "doc/old-doc/Realm_of_Us_Design.en.md": "0e0ad4bfd57035124ee8ea6ed10f61a2723985a7c0a43d412fb470dc715d39d7"
+  }
+}

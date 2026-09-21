@@ -1,0 +1,140 @@
+{
+  "date": "2026-09-14",
+  "scope": "Current Mac foreground performance of the exported S1 Git collaboration fixture only",
+  "status": "passed",
+  "app": "dist/viewer-git/macos/Realm of Us.app",
+  "app_rebuilt_for_retest": false,
+  "commit_oid": "bd52c15f3ceb0ae73a5b9bb260b0b7d2c5759547",
+  "view_root_sha256": "054f40ae945efde072983368431293b37eb6e3608692a63e6bc0cac5115fa061",
+  "conditions": {
+    "screen": "on; zero unfocused measured frames in both runs",
+    "power": "AC Power",
+    "gpu": "Apple M3 (Apple9)",
+    "godot": "4.7.2-stable (official)",
+    "renderer": "forward_plus",
+    "viewport": [
+      1920,
+      1080
+    ],
+    "visual_preset": "daylight",
+    "quality": "Quality",
+    "render_scale": 1.0,
+    "msaa_enum": 2,
+    "msaa_samples": 4,
+    "sdfgi": true,
+    "ssil": true,
+    "fps_cap": "disabled by benchmark mode",
+    "nominal_run_seconds": 36,
+    "statistics_start": "2 seconds after initial asset queue becomes ready",
+    "route": "Two bookmark views, switching with fade every 8 seconds",
+    "screenshots_during_performance_runs": false,
+    "runs_serial": true,
+    "concurrent_blender_render": false,
+    "rss_sample_interval_seconds": 0.2,
+    "startup_observation": "New process; OS file caches and driver shader caches were not cleared"
+  },
+  "thresholds": {
+    "frame_ms_p95_max": 33,
+    "peak_rss_bytes_max": 2147483648,
+    "unfocused_frames_max": 0,
+    "focused_frames_min": 120
+  },
+  "runs": [
+    {
+      "name": "tour-first",
+      "report": "build/s1-git/foreground-20260914T165303Z/tour-first.json",
+      "log": "build/s1-git/foreground-20260914T165303Z/tour-first.log",
+      "metrics": {
+        "seconds": 36.353182,
+        "frames": 3502,
+        "focused_frames": 3502,
+        "unfocused_frames": 0,
+        "foreground_measurement_valid": true,
+        "frame_ms_p50": 9.424,
+        "frame_ms_p95": 11.328,
+        "frame_ms_p99": 11.982,
+        "peak_rss_bytes": 357335040,
+        "rss_samples": 178,
+        "first_ready_seconds": 0.35113,
+        "first_presented_seconds": 0.357554,
+        "first_presented_process_seconds": 1.4892427073791623,
+        "process_wall_seconds": 37.662642207928,
+        "import_ms_p95": 10.975,
+        "imports": 3,
+        "unloads": 0,
+        "cancelled": 0,
+        "rejected": {}
+      },
+      "checks": {
+        "strict_foreground": true,
+        "frame_ms_p95_at_most_33": true,
+        "peak_rss_at_most_2_gib": true,
+        "fixed_commit": true,
+        "fixed_view_root": true,
+        "three_models_loaded": true,
+        "no_rejected_assets": true,
+        "expected_settings": true
+      },
+      "status": "passed"
+    },
+    {
+      "name": "tour-repeat",
+      "report": "build/s1-git/foreground-20260914T165303Z/tour-repeat.json",
+      "log": "build/s1-git/foreground-20260914T165303Z/tour-repeat.log",
+      "metrics": {
+        "seconds": 36.263782,
+        "frames": 3488,
+        "focused_frames": 3488,
+        "unfocused_frames": 0,
+        "foreground_measurement_valid": true,
+        "frame_ms_p50": 9.423,
+        "frame_ms_p95": 11.356,
+        "frame_ms_p99": 12.124,
+        "peak_rss_bytes": 386564096,
+        "rss_samples": 175,
+        "first_ready_seconds": 0.263627,
+        "first_presented_seconds": 0.27545,
+        "first_presented_process_seconds": 0.8445820407941937,
+        "process_wall_seconds": 37.03754129074514,
+        "import_ms_p95": 3.906,
+        "imports": 3,
+        "unloads": 0,
+        "cancelled": 0,
+        "rejected": {}
+      },
+      "checks": {
+        "strict_foreground": true,
+        "frame_ms_p95_at_most_33": true,
+        "peak_rss_at_most_2_gib": true,
+        "fixed_commit": true,
+        "fixed_view_root": true,
+        "three_models_loaded": true,
+        "no_rejected_assets": true,
+        "expected_settings": true
+      },
+      "status": "passed"
+    }
+  ],
+  "runtime_log_review": {
+    "status": "passed",
+    "script_errors_found": false,
+    "method": "Independent review of both runtime logs"
+  },
+  "standalone": {
+    "report": "build/s1-git/foreground-20260914T165303Z/standalone/acceptance.json",
+    "status": "passed",
+    "functional_checks": 9,
+    "focused_frames": 1031,
+    "unfocused_frames": 0,
+    "empty_authoring_path": true,
+    "screenshot": "build/s1-git/foreground-20260914T165303Z/standalone/viewer.png"
+  },
+  "limitations": [
+    "Small fixture: both bookmarks keep the same three GLBs loaded; far_tree stays outside the 48 m loading range. No unload or cancellation stress was exercised.",
+    "Does not establish performance for the V3 house, large worlds, or continuous free flight.",
+    "Fresh processes without clearing OS file caches or driver shader caches; not a strict cold-start benchmark.",
+    "First-presented process time is observed through a readiness file polled about every 0.2 seconds. It does not establish full GI convergence.",
+    "Sampled process RSS does not include all GPU or driver memory.",
+    "The separate standalone run takes a screenshot and is excluded from the performance table."
+  ]
+}

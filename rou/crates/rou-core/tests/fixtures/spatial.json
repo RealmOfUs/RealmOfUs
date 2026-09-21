@@ -1,0 +1,1547 @@
+{
+  "profile": {
+    "id": "bounded-cartesian-v1-experiment",
+    "units": "meter",
+    "up": "Y",
+    "handedness": "right",
+    "placement_unit_mm": 1,
+    "origin_mm": [
+      0,
+      0,
+      0
+    ],
+    "chunk_size_mm": [
+      32000,
+      32000,
+      32000
+    ],
+    "min_chunk": [
+      -4,
+      -2,
+      -4
+    ],
+    "max_chunk": [
+      4,
+      2,
+      4
+    ]
+  },
+  "profile_hash": "c5ea37e2ce31d6894d505e45475b8791c530767b8bd7d81637bc16e5df4a1f97",
+  "positions": [
+    {
+      "position_mm": [
+        0,
+        0,
+        0
+      ],
+      "chunk": [
+        0,
+        0,
+        0
+      ],
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "accepted": true,
+      "name": "origin"
+    },
+    {
+      "position_mm": [
+        -1,
+        0,
+        0
+      ],
+      "chunk": [
+        -1,
+        0,
+        0
+      ],
+      "offset": [
+        31999,
+        0,
+        0
+      ],
+      "accepted": true,
+      "name": "negative_one_mm"
+    },
+    {
+      "position_mm": [
+        -32000,
+        0,
+        0
+      ],
+      "chunk": [
+        -1,
+        0,
+        0
+      ],
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "accepted": true,
+      "name": "negative_edge"
+    },
+    {
+      "position_mm": [
+        -32001,
+        0,
+        0
+      ],
+      "chunk": [
+        -2,
+        0,
+        0
+      ],
+      "offset": [
+        31999,
+        0,
+        0
+      ],
+      "accepted": true,
+      "name": "negative_beyond_edge"
+    },
+    {
+      "position_mm": [
+        32000,
+        0,
+        0
+      ],
+      "chunk": [
+        1,
+        0,
+        0
+      ],
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "accepted": true,
+      "name": "positive_edge"
+    },
+    {
+      "position_mm": [
+        -128000,
+        -64000,
+        -128000
+      ],
+      "chunk": [
+        -4,
+        -2,
+        -4
+      ],
+      "offset": [
+        0,
+        0,
+        0
+      ],
+      "accepted": true,
+      "name": "world_min"
+    },
+    {
+      "position_mm": [
+        127999,
+        63999,
+        127999
+      ],
+      "chunk": [
+        3,
+        1,
+        3
+      ],
+      "offset": [
+        31999,
+        31999,
+        31999
+      ],
+      "accepted": true,
+      "name": "world_last_mm"
+    },
+    {
+      "position_mm": [
+        128000,
+        0,
+        0
+      ],
+      "accepted": false,
+      "name": "world_max_x"
+    },
+    {
+      "position_mm": [
+        0,
+        64000,
+        0
+      ],
+      "accepted": false,
+      "name": "world_max_y"
+    },
+    {
+      "position_mm": [
+        -128001,
+        0,
+        0
+      ],
+      "accepted": false,
+      "name": "below_world_min"
+    },
+    {
+      "name": "world_max_z",
+      "position_mm": [
+        0,
+        0,
+        128000
+      ],
+      "accepted": false
+    },
+    {
+      "name": "fractional_mm",
+      "position_mm": [
+        0.5,
+        0,
+        0
+      ],
+      "accepted": false
+    },
+    {
+      "name": "boolean_mm",
+      "position_mm": [
+        true,
+        0,
+        0
+      ],
+      "accepted": false
+    },
+    {
+      "name": "string_mm",
+      "position_mm": [
+        "0",
+        0,
+        0
+      ],
+      "accepted": false
+    },
+    {
+      "name": "integral_json_position",
+      "position_mm": [
+        -1.0,
+        0.0,
+        0.0
+      ],
+      "accepted": true,
+      "chunk": [
+        -1,
+        0,
+        0
+      ],
+      "offset": [
+        31999,
+        0,
+        0
+      ]
+    },
+    {
+      "name": "shifted_rectangular_negative",
+      "profile_changes": {
+        "origin_mm": [
+          1000,
+          2000,
+          -3000
+        ],
+        "chunk_size_mm": [
+          16000,
+          32000,
+          64000
+        ],
+        "min_chunk": [
+          -2,
+          -2,
+          -2
+        ],
+        "max_chunk": [
+          2,
+          2,
+          2
+        ]
+      },
+      "position_mm": [
+        999,
+        2000,
+        -3001
+      ],
+      "accepted": true,
+      "chunk": [
+        -1,
+        0,
+        -1
+      ],
+      "offset": [
+        15999,
+        0,
+        63999
+      ]
+    },
+    {
+      "name": "shifted_rectangular_edge",
+      "profile_changes": {
+        "origin_mm": [
+          1000,
+          2000,
+          -3000
+        ],
+        "chunk_size_mm": [
+          16000,
+          32000,
+          64000
+        ],
+        "min_chunk": [
+          -2,
+          -2,
+          -2
+        ],
+        "max_chunk": [
+          2,
+          2,
+          2
+        ]
+      },
+      "position_mm": [
+        17000,
+        34000,
+        61000
+      ],
+      "accepted": true,
+      "chunk": [
+        1,
+        1,
+        1
+      ],
+      "offset": [
+        0,
+        0,
+        0
+      ]
+    }
+  ],
+  "description": "Reviewed S1.1 inputs and expected results. Tests read this file; never regenerate expectations from the implementation under test.",
+  "profiles": [
+    {
+      "name": "default",
+      "changes": {},
+      "shape_accepted": true,
+      "accepted": true
+    },
+    {
+      "name": "16m",
+      "changes": {
+        "chunk_size_mm": [
+          16000,
+          16000,
+          16000
+        ],
+        "min_chunk": [
+          -8,
+          -4,
+          -8
+        ],
+        "max_chunk": [
+          8,
+          4,
+          8
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": true
+    },
+    {
+      "name": "64m",
+      "changes": {
+        "chunk_size_mm": [
+          64000,
+          64000,
+          64000
+        ],
+        "min_chunk": [
+          -2,
+          -1,
+          -2
+        ],
+        "max_chunk": [
+          2,
+          1,
+          2
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": true
+    },
+    {
+      "name": "rectangular_shifted_grid",
+      "changes": {
+        "origin_mm": [
+          1000,
+          2000,
+          -3000
+        ],
+        "chunk_size_mm": [
+          16000,
+          32000,
+          64000
+        ],
+        "min_chunk": [
+          -2,
+          -2,
+          -2
+        ],
+        "max_chunk": [
+          2,
+          2,
+          2
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": true
+    },
+    {
+      "name": "minimum_chunk_1mm",
+      "changes": {
+        "chunk_size_mm": [
+          1,
+          1,
+          1
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": true
+    },
+    {
+      "name": "integral_json_numbers",
+      "changes": {
+        "placement_unit_mm": 1.0,
+        "chunk_size_mm": [
+          32000.0,
+          32000.0,
+          32000.0
+        ],
+        "origin_mm": [
+          -0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": true,
+      "profile_hash": "c5ea37e2ce31d6894d505e45475b8791c530767b8bd7d81637bc16e5df4a1f97"
+    },
+    {
+      "name": "exact_chunk_count_limit",
+      "changes": {
+        "min_chunk": [
+          0,
+          0,
+          0
+        ],
+        "max_chunk": [
+          32,
+          32,
+          32
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": true
+    },
+    {
+      "name": "excess_chunk_count",
+      "changes": {
+        "chunk_size_mm": [
+          1,
+          1,
+          1
+        ],
+        "min_chunk": [
+          0,
+          0,
+          0
+        ],
+        "max_chunk": [
+          32769,
+          1,
+          1
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": false
+    },
+    {
+      "name": "upper_world_limit",
+      "changes": {
+        "origin_mm": [
+          1000000000,
+          0,
+          0
+        ],
+        "min_chunk": [
+          -1,
+          0,
+          0
+        ],
+        "max_chunk": [
+          0,
+          1,
+          1
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": true
+    },
+    {
+      "name": "lower_world_limit",
+      "changes": {
+        "origin_mm": [
+          -1000000000,
+          0,
+          0
+        ],
+        "min_chunk": [
+          0,
+          0,
+          0
+        ],
+        "max_chunk": [
+          1,
+          1,
+          1
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": true
+    },
+    {
+      "name": "world_limit_overrun",
+      "changes": {
+        "origin_mm": [
+          999999999,
+          0,
+          0
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": false
+    },
+    {
+      "name": "world_limit_underrun",
+      "changes": {
+        "origin_mm": [
+          -999999999,
+          0,
+          0
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": false
+    },
+    {
+      "name": "chunk_zero",
+      "changes": {
+        "chunk_size_mm": [
+          0,
+          32000,
+          32000
+        ]
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "chunk_negative",
+      "changes": {
+        "chunk_size_mm": [
+          -1,
+          32000,
+          32000
+        ]
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "chunk_over_maximum",
+      "changes": {
+        "chunk_size_mm": [
+          64001,
+          32000,
+          32000
+        ]
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "chunk_fractional",
+      "changes": {
+        "chunk_size_mm": [
+          1.5,
+          32000,
+          32000
+        ]
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "chunk_boolean",
+      "changes": {
+        "chunk_size_mm": [
+          true,
+          32000,
+          32000
+        ]
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "chunk_string",
+      "changes": {
+        "chunk_size_mm": [
+          "32000",
+          32000,
+          32000
+        ]
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "vector_too_short",
+      "changes": {
+        "chunk_size_mm": [
+          32000,
+          32000
+        ]
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "vector_not_array",
+      "changes": {
+        "origin_mm": "0,0,0"
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "coordinate_field_overflow",
+      "changes": {
+        "origin_mm": [
+          1000000001,
+          0,
+          0
+        ]
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "empty_bounds",
+      "changes": {
+        "max_chunk": [
+          -4,
+          2,
+          4
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": false
+    },
+    {
+      "name": "inverted_bounds",
+      "changes": {
+        "min_chunk": [
+          5,
+          -2,
+          -4
+        ]
+      },
+      "shape_accepted": true,
+      "accepted": false
+    },
+    {
+      "name": "unknown_profile",
+      "changes": {
+        "id": "other"
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "wrong_units",
+      "changes": {
+        "units": "centimeter"
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "wrong_up",
+      "changes": {
+        "up": "Z"
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "wrong_handedness",
+      "changes": {
+        "handedness": "left"
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "wrong_quantization",
+      "changes": {
+        "placement_unit_mm": 2
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "boolean_quantization",
+      "changes": {
+        "placement_unit_mm": true
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "string_quantization",
+      "changes": {
+        "placement_unit_mm": "1"
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "wrong_constant_type",
+      "changes": {
+        "id": []
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "extra_field",
+      "changes": {
+        "extra": 0
+      },
+      "shape_accepted": false,
+      "accepted": false
+    },
+    {
+      "name": "missing_field",
+      "changes": {},
+      "shape_accepted": false,
+      "accepted": false,
+      "remove": [
+        "origin_mm"
+      ]
+    }
+  ],
+  "bounds": [
+    {
+      "name": "exact_chunk",
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        32000,
+        32000,
+        32000
+      ],
+      "accepted": true,
+      "chunks": [
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "name": "negative_exact_chunk",
+      "min": [
+        -32000,
+        -32000,
+        -32000
+      ],
+      "max": [
+        0,
+        0,
+        0
+      ],
+      "accepted": true,
+      "chunks": [
+        [
+          -1,
+          -1,
+          -1
+        ]
+      ]
+    },
+    {
+      "name": "cross_eight_chunks",
+      "min": [
+        -1,
+        -1,
+        -1
+      ],
+      "max": [
+        1,
+        1,
+        1
+      ],
+      "accepted": true,
+      "chunks": [
+        [
+          -1,
+          -1,
+          -1
+        ],
+        [
+          -1,
+          -1,
+          0
+        ],
+        [
+          -1,
+          0,
+          -1
+        ],
+        [
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          -1,
+          -1
+        ],
+        [
+          0,
+          -1,
+          0
+        ],
+        [
+          0,
+          0,
+          -1
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "name": "upper_world_face",
+      "min": [
+        127999,
+        63999,
+        127999
+      ],
+      "max": [
+        128000,
+        64000,
+        128000
+      ],
+      "accepted": true,
+      "chunks": [
+        [
+          3,
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "name": "empty_axis",
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        0,
+        1,
+        1
+      ],
+      "accepted": false,
+      "error_contains": "Inverted AABB"
+    },
+    {
+      "name": "inverted_axis",
+      "min": [
+        1,
+        0,
+        0
+      ],
+      "max": [
+        0,
+        1,
+        1
+      ],
+      "accepted": false,
+      "error_contains": "Inverted AABB"
+    },
+    {
+      "name": "past_upper_face",
+      "min": [
+        127999,
+        0,
+        0
+      ],
+      "max": [
+        128001,
+        1,
+        1
+      ],
+      "accepted": false,
+      "error_contains": "AABB outside realm"
+    },
+    {
+      "name": "past_lower_face",
+      "min": [
+        -128001,
+        0,
+        0
+      ],
+      "max": [
+        -127999,
+        1,
+        1
+      ],
+      "accepted": false,
+      "error_contains": "AABB outside realm"
+    },
+    {
+      "name": "fractional_bound",
+      "min": [
+        0.5,
+        0,
+        0
+      ],
+      "max": [
+        1,
+        1,
+        1
+      ],
+      "accepted": false,
+      "error_contains": "Invalid AABB"
+    },
+    {
+      "name": "boolean_bound",
+      "min": [
+        false,
+        0,
+        0
+      ],
+      "max": [
+        1,
+        1,
+        1
+      ],
+      "accepted": false,
+      "error_contains": "Invalid AABB"
+    },
+    {
+      "name": "shifted_rectangular_crossing",
+      "profile_changes": {
+        "origin_mm": [
+          1000,
+          2000,
+          -3000
+        ],
+        "chunk_size_mm": [
+          16000,
+          32000,
+          64000
+        ],
+        "min_chunk": [
+          -2,
+          -2,
+          -2
+        ],
+        "max_chunk": [
+          2,
+          2,
+          2
+        ]
+      },
+      "min": [
+        999,
+        2000,
+        -3001
+      ],
+      "max": [
+        1001,
+        2001,
+        -2999
+      ],
+      "accepted": true,
+      "chunks": [
+        [
+          -1,
+          0,
+          -1
+        ],
+        [
+          -1,
+          0,
+          0
+        ],
+        [
+          0,
+          0,
+          -1
+        ],
+        [
+          0,
+          0,
+          0
+        ]
+      ]
+    },
+    {
+      "name": "exact_coverage_limit",
+      "profile_changes": {
+        "chunk_size_mm": [
+          1,
+          1,
+          1
+        ],
+        "min_chunk": [
+          0,
+          0,
+          0
+        ],
+        "max_chunk": [
+          2049,
+          1,
+          1
+        ]
+      },
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        2048,
+        1,
+        1
+      ],
+      "accepted": true,
+      "chunk_count": 2048
+    },
+    {
+      "name": "excess_coverage",
+      "profile_changes": {
+        "chunk_size_mm": [
+          1,
+          1,
+          1
+        ],
+        "min_chunk": [
+          0,
+          0,
+          0
+        ],
+        "max_chunk": [
+          2049,
+          1,
+          1
+        ]
+      },
+      "min": [
+        0,
+        0,
+        0
+      ],
+      "max": [
+        2049,
+        1,
+        1
+      ],
+      "accepted": false,
+      "error_contains": "AABB coverage budget"
+    }
+  ],
+  "catalog": {
+    "format": "rou-preview/0.1",
+    "profile": {
+      "id": "bounded-cartesian-v1-experiment",
+      "units": "meter",
+      "up": "Y",
+      "handedness": "right",
+      "placement_unit_mm": 1,
+      "origin_mm": [
+        0,
+        0,
+        0
+      ],
+      "chunk_size_mm": [
+        32000,
+        32000,
+        32000
+      ],
+      "min_chunk": [
+        -4,
+        -2,
+        -4
+      ],
+      "max_chunk": [
+        4,
+        2,
+        4
+      ]
+    },
+    "profile_hash": "c5ea37e2ce31d6894d505e45475b8791c530767b8bd7d81637bc16e5df4a1f97",
+    "index_complete": true,
+    "entities": [
+      {
+        "id": "house_01",
+        "position_mm": [
+          31000,
+          1000,
+          1000
+        ],
+        "owner_chunk": [
+          0,
+          0,
+          0
+        ],
+        "offset_mm": [
+          31000,
+          1000,
+          1000
+        ],
+        "bounds_mm": {
+          "min": [
+            31000,
+            0,
+            0
+          ],
+          "max": [
+            33000,
+            2000,
+            2000
+          ]
+        },
+        "asset": {
+          "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "path": "objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.glb",
+          "bytes": 100
+        }
+      }
+    ],
+    "chunks": {
+      "0,0,0": [
+        "house_01"
+      ],
+      "1,0,0": [
+        "house_01"
+      ]
+    }
+  },
+  "catalogs": [
+    {
+      "name": "cross_chunk_entity",
+      "changes": {},
+      "accepted": true,
+      "empty_chunk": "-1,0,0"
+    },
+    {
+      "name": "known_empty_world",
+      "changes": {
+        "entities": [],
+        "chunks": {}
+      },
+      "accepted": true,
+      "empty_chunk": "0,0,0"
+    },
+    {
+      "name": "unknown_catalog",
+      "changes": {
+        "index_complete": false
+      },
+      "accepted": false
+    },
+    {
+      "name": "unknown_empty_catalog",
+      "changes": {
+        "index_complete": false,
+        "entities": [],
+        "chunks": {}
+      },
+      "accepted": false
+    },
+    {
+      "name": "missing_completeness",
+      "changes": {},
+      "remove": [
+        "index_complete"
+      ],
+      "accepted": false
+    },
+    {
+      "name": "numeric_completeness",
+      "changes": {
+        "index_complete": 1
+      },
+      "accepted": false
+    },
+    {
+      "name": "omitted_covered_chunk",
+      "changes": {
+        "chunks": {
+          "0,0,0": [
+            "house_01"
+          ]
+        }
+      },
+      "accepted": false
+    },
+    {
+      "name": "invented_chunk",
+      "changes": {
+        "chunks": {
+          "0,0,0": [
+            "house_01"
+          ],
+          "1,0,0": [
+            "house_01"
+          ],
+          "2,0,0": [
+            "house_01"
+          ]
+        }
+      },
+      "accepted": false
+    },
+    {
+      "name": "moved_stable_entity",
+      "changes": {
+        "entities": [
+          {
+            "id": "house_01",
+            "position_mm": [
+              95000,
+              1000,
+              1000
+            ],
+            "owner_chunk": [
+              2,
+              0,
+              0
+            ],
+            "offset_mm": [
+              31000,
+              1000,
+              1000
+            ],
+            "bounds_mm": {
+              "min": [
+                95000,
+                0,
+                0
+              ],
+              "max": [
+                97000,
+                2000,
+                2000
+              ]
+            },
+            "asset": {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "path": "objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.glb",
+              "bytes": 100
+            }
+          }
+        ],
+        "chunks": {
+          "2,0,0": [
+            "house_01"
+          ],
+          "3,0,0": [
+            "house_01"
+          ]
+        }
+      },
+      "accepted": true,
+      "preserves_entity": true
+    },
+    {
+      "name": "move_without_index_update",
+      "changes": {
+        "entities": [
+          {
+            "id": "house_01",
+            "position_mm": [
+              95000,
+              1000,
+              1000
+            ],
+            "owner_chunk": [
+              2,
+              0,
+              0
+            ],
+            "offset_mm": [
+              31000,
+              1000,
+              1000
+            ],
+            "bounds_mm": {
+              "min": [
+                95000,
+                0,
+                0
+              ],
+              "max": [
+                97000,
+                2000,
+                2000
+              ]
+            },
+            "asset": {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "path": "objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.glb",
+              "bytes": 100
+            }
+          }
+        ]
+      },
+      "accepted": false
+    },
+    {
+      "name": "distinct_instances_shared_asset",
+      "changes": {
+        "entities": [
+          {
+            "id": "house_01",
+            "position_mm": [
+              31000,
+              1000,
+              1000
+            ],
+            "owner_chunk": [
+              0,
+              0,
+              0
+            ],
+            "offset_mm": [
+              31000,
+              1000,
+              1000
+            ],
+            "bounds_mm": {
+              "min": [
+                31000,
+                0,
+                0
+              ],
+              "max": [
+                33000,
+                2000,
+                2000
+              ]
+            },
+            "asset": {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "path": "objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.glb",
+              "bytes": 100
+            }
+          },
+          {
+            "id": "house_02",
+            "position_mm": [
+              95000,
+              1000,
+              1000
+            ],
+            "owner_chunk": [
+              2,
+              0,
+              0
+            ],
+            "offset_mm": [
+              31000,
+              1000,
+              1000
+            ],
+            "bounds_mm": {
+              "min": [
+                95000,
+                0,
+                0
+              ],
+              "max": [
+                97000,
+                2000,
+                2000
+              ]
+            },
+            "asset": {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "path": "objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.glb",
+              "bytes": 100
+            }
+          }
+        ],
+        "chunks": {
+          "0,0,0": [
+            "house_01"
+          ],
+          "1,0,0": [
+            "house_01"
+          ],
+          "2,0,0": [
+            "house_02"
+          ],
+          "3,0,0": [
+            "house_02"
+          ]
+        }
+      },
+      "accepted": true,
+      "shared_asset": true
+    },
+    {
+      "name": "duplicate_entity_id",
+      "changes": {
+        "entities": [
+          {
+            "id": "house_01",
+            "position_mm": [
+              31000,
+              1000,
+              1000
+            ],
+            "owner_chunk": [
+              0,
+              0,
+              0
+            ],
+            "offset_mm": [
+              31000,
+              1000,
+              1000
+            ],
+            "bounds_mm": {
+              "min": [
+                31000,
+                0,
+                0
+              ],
+              "max": [
+                33000,
+                2000,
+                2000
+              ]
+            },
+            "asset": {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "path": "objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.glb",
+              "bytes": 100
+            }
+          },
+          {
+            "id": "house_01",
+            "position_mm": [
+              31000,
+              1000,
+              1000
+            ],
+            "owner_chunk": [
+              0,
+              0,
+              0
+            ],
+            "offset_mm": [
+              31000,
+              1000,
+              1000
+            ],
+            "bounds_mm": {
+              "min": [
+                31000,
+                0,
+                0
+              ],
+              "max": [
+                33000,
+                2000,
+                2000
+              ]
+            },
+            "asset": {
+              "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+              "path": "objects/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa.glb",
+              "bytes": 100
+            }
+          }
+        ]
+      },
+      "accepted": false
+    },
+    {
+      "name": "mismatched_profile_hash",
+      "changes": {
+        "profile_hash": "0000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "accepted": false
+    },
+    {
+      "name": "changed_profile_with_old_hash",
+      "changes": {
+        "profile": {
+          "id": "bounded-cartesian-v1-experiment",
+          "units": "meter",
+          "up": "Y",
+          "handedness": "right",
+          "placement_unit_mm": 1,
+          "origin_mm": [
+            0,
+            0,
+            0
+          ],
+          "chunk_size_mm": [
+            16000,
+            16000,
+            16000
+          ],
+          "min_chunk": [
+            -4,
+            -2,
+            -4
+          ],
+          "max_chunk": [
+            4,
+            2,
+            4
+          ]
+        }
+      },
+      "accepted": false
+    }
+  ]
+}

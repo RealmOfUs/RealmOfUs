@@ -1,0 +1,16 @@
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+exclude = ["build/**", "dist/**", ".cache/**", "doc/old-doc/**", ".git/**", "**/.godot/**"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]
+
+[tool.ruff.lint.per-file-ignores]
+# Blender executes --python scripts without installing the repository package.
+"examples/**/*.py" = ["E402"]
+"toolchain/build/*.py" = ["E402"]
+"toolchain/tests/**/*.py" = ["E402"]
+
+[tool.ruff.format]
+docstring-code-format = true

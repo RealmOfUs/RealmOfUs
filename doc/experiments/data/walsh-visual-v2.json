@@ -1,0 +1,121 @@
+{
+  "date": "2026-09-09",
+  "hardware": "MacBook Air M3, 24 GiB, macOS 26.3",
+  "entities": 36,
+  "runtime_glb_bytes": 33539760,
+  "vertices": 982504,
+  "max_glb_bytes": 2139668,
+  "max_vertices": 70043,
+  "max_indices": 97440,
+  "max_nodes": 17,
+  "hdri_bytes": 4434394,
+  "zip_bytes": 86678689,
+  "zip_sha256": "0221bb1ef213a66955c0c4180db1e079cb03096e99669b2b8d547829d8816f3e",
+  "runs": {
+    "s1": {
+      "first_ready_seconds": 0.773862,
+      "frame_ms_p50": 7.656,
+      "frame_ms_p95": 17.732,
+      "frame_ms_p99": 26.336,
+      "peak_rss_bytes": 320405504,
+      "frames": 6606,
+      "seconds": 66.779878,
+      "process_wall_seconds": 70.12074641697109,
+      "imports": 36,
+      "rejected": {},
+      "viewport": [
+        1920,
+        1080
+      ],
+      "renderer": "forward_plus",
+      "gpu": "Apple M3 (Apple9)",
+      "godot": "4.7.2-stable (official)",
+      "raw_report": "build/walsh/measurements/macos-standalone.json"
+    },
+    "v2_first_launch": {
+      "first_ready_seconds": 55.646595,
+      "frame_ms_p50": 20.57,
+      "frame_ms_p95": 28.964,
+      "frame_ms_p99": 36.313,
+      "peak_rss_bytes": 353665024,
+      "frames": 2985,
+      "seconds": 121.65082,
+      "process_wall_seconds": 130.5489244577475,
+      "imports": 36,
+      "rejected": {},
+      "viewport": [
+        1920,
+        1080
+      ],
+      "renderer": "forward_plus",
+      "gpu": "Apple M3 (Apple9)",
+      "godot": "4.7.2-stable (official)",
+      "sdfgi": true,
+      "ssil": true,
+      "raw_report": "build/walsh-v2/measurements/macos-first-launch.json"
+    },
+    "v2_quality": {
+      "first_ready_seconds": 1.41427,
+      "frame_ms_p50": 20.955,
+      "frame_ms_p95": 29.634,
+      "frame_ms_p99": 33.756,
+      "peak_rss_bytes": 335740928,
+      "frames": 2941,
+      "seconds": 67.419436,
+      "process_wall_seconds": 69.54679916705936,
+      "imports": 36,
+      "rejected": {},
+      "viewport": [
+        1920,
+        1080
+      ],
+      "renderer": "forward_plus",
+      "gpu": "Apple M3 (Apple9)",
+      "godot": "4.7.2-stable (official)",
+      "sdfgi": true,
+      "ssil": true,
+      "raw_report": "build/walsh-v2/measurements/macos-standalone.json"
+    },
+    "v2_performance": {
+      "first_ready_seconds": 1.768021,
+      "frame_ms_p50": 8.913,
+      "frame_ms_p95": 17.569,
+      "frame_ms_p99": 30.012,
+      "peak_rss_bytes": 345866240,
+      "frames": 6275,
+      "seconds": 67.77098,
+      "process_wall_seconds": 69.97144437488168,
+      "imports": 36,
+      "rejected": {},
+      "viewport": [
+        1920,
+        1080
+      ],
+      "renderer": "forward_plus",
+      "gpu": "Apple M3 (Apple9)",
+      "godot": "4.7.2-stable (official)",
+      "sdfgi": false,
+      "ssil": false,
+      "render_scale": 0.75,
+      "msaa": 1,
+      "raw_report": "build/walsh-v2/measurements/macos-performance.json"
+    }
+  },
+  "checks": {
+    "python_test_groups": 8,
+    "godot_format_checks": 723,
+    "lifecycle_cancelled": 36,
+    "lifecycle_unloaded": 36,
+    "code_signature_verified": true,
+    "zip_crc_verified": true,
+    "offline_process": true,
+    "old_doc_files_unchanged": 5
+  },
+  "notes": [
+    "Quality: native 1920×1080, SDFGI + SSIL + 4x MSAA + TAA.",
+    "Performance: UI 1920×1080, 3D 1440×810, no SDFGI / SSIL, 2x MSAA + TAA.",
+    "First-ready time starts at Godot _ready; excludes earlier application initialization.",
+    "S1 and v2 tour viewpoints differ; these are workload measurements, not a controlled renderer comparison.",
+    "Seven Texture RID warnings remain at Godot Metal process exit."
+  ]
+}

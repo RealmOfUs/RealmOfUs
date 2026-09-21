@@ -1,0 +1,35 @@
+[workspace]
+members = ["app", "crates/rou-core", "crates/rou-git", "crates/rou-ffi", "crates/rou-godot"]
+default-members = ["app", "crates/rou-core", "crates/rou-git"]
+exclude = ["fuzz"]
+resolver = "3"
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+
+[workspace.dependencies]
+rou-core = { path = "crates/rou-core" }
+rou-git = { path = "crates/rou-git" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["float_roundtrip"] }
+serde_json_canonicalizer = "0.3.2"
+sha2 = "0.10"
+thiserror = "2"
+anyhow = "1"
+bstr = { version = "1", features = ["serde"] }
+tempfile = "3"
+uuid = { version = "1", features = ["v4"] }
+ctrlc = { version = "3", features = ["termination"] }
+fs2 = "0.4"
+nix = { version = "0.29", features = ["signal", "process"] }
+clap = { version = "4", features = ["derive"] }
+cbindgen = "0.29"
+godot = { version = "=0.5.5", default-features = false, features = ["api-4-7"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = "warn"

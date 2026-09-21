@@ -1,0 +1,25 @@
+# C ABI library for Blender/ctypes and other C callers.
+[package]
+name = "rou-ffi"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "rou"
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[dependencies]
+rou-core.workspace = true
+
+[build-dependencies]
+cbindgen.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+
+[lints.clippy]
+all = "warn"

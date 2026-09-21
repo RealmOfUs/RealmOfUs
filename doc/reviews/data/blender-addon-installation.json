@@ -1,0 +1,308 @@
+{
+  "date": "2026-09-14",
+  "status": "passed",
+  "scope": "Blender Preferences ZIP installation, restricted enable/disable lifecycle and authoring session recovery; current Mac",
+  "blender": "5.2.1 LTS",
+  "addon_version": [
+    0,
+    3,
+    1
+  ],
+  "archive": "dist/rou_authoring.zip",
+  "archive_sha256": "ba1e22bc1694dd457fa799a4eb030556f622e756a35849c6342aab20d2e90c8d",
+  "baseline": {
+    "version": [
+      0,
+      3,
+      0
+    ],
+    "expected_failure_reproduced": true,
+    "report": "build/addon-install-regression/baseline-proof/installation-report.json",
+    "error": "Error: '_RestrictData' object has no attribute 'is_dirty'\n"
+  },
+  "installation": {
+    "status": "passed",
+    "report": "build/addon-install-regression/fixed-final/installation-report.json",
+    "check_count": 61,
+    "checks": [
+      {
+        "name": "blender_user_resources_isolated",
+        "passed": true
+      },
+      {
+        "name": "blender_user_config_isolated",
+        "passed": true
+      },
+      {
+        "name": "blender_user_scripts_isolated",
+        "passed": true
+      },
+      {
+        "name": "effective_config_isolated",
+        "passed": true
+      },
+      {
+        "name": "effective_scripts_isolated",
+        "passed": true
+      },
+      {
+        "name": "zip_install_operator",
+        "passed": true
+      },
+      {
+        "name": "enable_operator",
+        "passed": true
+      },
+      {
+        "name": "installed_copy_used",
+        "passed": true
+      },
+      {
+        "name": "initial_enabled_state",
+        "passed": true
+      },
+      {
+        "name": "initial_enable_classes",
+        "passed": true,
+        "count": 12
+      },
+      {
+        "name": "initial_enable_sidebar",
+        "passed": true
+      },
+      {
+        "name": "initial_enable_operators",
+        "passed": true,
+        "count": 9
+      },
+      {
+        "name": "initial_enable_single_handlers",
+        "passed": true
+      },
+      {
+        "name": "initial_enable_properties",
+        "passed": true
+      },
+      {
+        "name": "blank_start_has_no_session",
+        "passed": true
+      },
+      {
+        "name": "unguarded_save_does_not_start_session",
+        "passed": true
+      },
+      {
+        "name": "first_disable_operator",
+        "passed": true
+      },
+      {
+        "name": "first_disable_state",
+        "passed": true
+      },
+      {
+        "name": "first_disable_session",
+        "passed": true
+      },
+      {
+        "name": "first_disable_handlers",
+        "passed": true
+      },
+      {
+        "name": "first_disable_classes",
+        "passed": true
+      },
+      {
+        "name": "first_disable_properties",
+        "passed": true
+      },
+      {
+        "name": "dirty_fixture",
+        "passed": true
+      },
+      {
+        "name": "dirty_reenable_classes",
+        "passed": true,
+        "count": 12
+      },
+      {
+        "name": "dirty_reenable_sidebar",
+        "passed": true
+      },
+      {
+        "name": "dirty_reenable_operators",
+        "passed": true,
+        "count": 9
+      },
+      {
+        "name": "dirty_reenable_single_handlers",
+        "passed": true
+      },
+      {
+        "name": "dirty_reenable_properties",
+        "passed": true
+      },
+      {
+        "name": "dirty_scene_not_adopted_or_modified",
+        "passed": true
+      },
+      {
+        "name": "dirty_scene_write_refused",
+        "passed": true,
+        "error": "Reopen the saved source project to start an authoring session"
+      },
+      {
+        "name": "refused_write_preserves_disk",
+        "passed": true
+      },
+      {
+        "name": "load_starts_session",
+        "passed": true
+      },
+      {
+        "name": "complete_source_loaded",
+        "passed": true
+      },
+      {
+        "name": "placement_restored_on_load",
+        "passed": true
+      },
+      {
+        "name": "catalog_operator",
+        "passed": true
+      },
+      {
+        "name": "placement_operator",
+        "passed": true
+      },
+      {
+        "name": "placement_written",
+        "passed": true
+      },
+      {
+        "name": "save_operator",
+        "passed": true
+      },
+      {
+        "name": "guarded_save_keeps_session",
+        "passed": true
+      },
+      {
+        "name": "external_placement_stales_session",
+        "passed": true,
+        "error": "Source, binding or placement changed; reopen first: realm/entities/house.json"
+      },
+      {
+        "name": "external_placement_restored",
+        "passed": true
+      },
+      {
+        "name": "active_session_disable_operator",
+        "passed": true
+      },
+      {
+        "name": "active_session_disable_state",
+        "passed": true
+      },
+      {
+        "name": "active_session_disable_session",
+        "passed": true
+      },
+      {
+        "name": "active_session_disable_handlers",
+        "passed": true
+      },
+      {
+        "name": "active_session_disable_classes",
+        "passed": true
+      },
+      {
+        "name": "active_session_disable_properties",
+        "passed": true
+      },
+      {
+        "name": "final_reenable_classes",
+        "passed": true,
+        "count": 12
+      },
+      {
+        "name": "final_reenable_sidebar",
+        "passed": true
+      },
+      {
+        "name": "final_reenable_operators",
+        "passed": true,
+        "count": 9
+      },
+      {
+        "name": "final_reenable_single_handlers",
+        "passed": true
+      },
+      {
+        "name": "final_reenable_properties",
+        "passed": true
+      },
+      {
+        "name": "open_source_requires_reopen",
+        "passed": true
+      },
+      {
+        "name": "reenabled_load_restores_session_and_placement",
+        "passed": true
+      },
+      {
+        "name": "final_disable_operator",
+        "passed": true
+      },
+      {
+        "name": "final_disable_state",
+        "passed": true
+      },
+      {
+        "name": "final_disable_session",
+        "passed": true
+      },
+      {
+        "name": "final_disable_handlers",
+        "passed": true
+      },
+      {
+        "name": "final_disable_classes",
+        "passed": true
+      },
+      {
+        "name": "final_disable_properties",
+        "passed": true
+      },
+      {
+        "name": "real_blender_restrictions_observed",
+        "passed": true,
+        "count": 3
+      }
+    ],
+    "restriction_entries": [
+      {
+        "data_type": "_RestrictData",
+        "context_type": "_RestrictContext"
+      },
+      {
+        "data_type": "_RestrictData",
+        "context_type": "_RestrictContext"
+      },
+      {
+        "data_type": "_RestrictData",
+        "context_type": "_RestrictContext"
+      }
+    ]
+  },
+  "authoring": {
+    "status": "passed",
+    "report": "build/addon-0.3.1/authoring/authoring-report.json",
+    "check_count": 17
+  },
+  "standalone_export": {
+    "status": "passed",
+    "report": "build/addon-0.3.1/export/report.json",
+    "check_count": 7
+  },
+  "behavior": "Registration does not access scene data. Open source again after enabling to establish the editing session."
+}

@@ -1,0 +1,541 @@
+{
+  "listing": {
+    "address": "349 Walsh Road",
+    "as_of": "2026-09-09",
+    "location": "Atherton, California",
+    "note": "Photo-informed study · Room positions and dimensions approximate",
+    "rooms": [
+      {
+        "floor": 1,
+        "id": "atrium_1",
+        "kind": "circulation",
+        "name": "Atrium / stair",
+        "rect": [
+          -6.3,
+          4.65,
+          7.5,
+          8.35
+        ],
+        "station": 1
+      },
+      {
+        "floor": 2,
+        "id": "atrium_2",
+        "kind": "circulation",
+        "name": "Atrium / stair",
+        "rect": [
+          -6.3,
+          4.65,
+          7.5,
+          8.35
+        ],
+        "station": 1
+      },
+      {
+        "floor": 3,
+        "id": "atrium_3",
+        "kind": "circulation",
+        "name": "Atrium / stair",
+        "rect": [
+          -6.3,
+          4.65,
+          7.5,
+          8.35
+        ],
+        "station": 1
+      },
+      {
+        "floor": 2,
+        "id": "living",
+        "kind": "living",
+        "name": "Living",
+        "rect": [
+          0.4,
+          -2.4,
+          8.4,
+          8.1
+        ],
+        "station": 2
+      },
+      {
+        "floor": 2,
+        "id": "dining",
+        "kind": "living",
+        "name": "Dining",
+        "rect": [
+          -14.7,
+          -3.2,
+          14.6,
+          7.5
+        ],
+        "station": 2
+      },
+      {
+        "floor": 2,
+        "id": "kitchen",
+        "kind": "kitchen",
+        "name": "Double-island kitchen",
+        "rect": [
+          -14.7,
+          -14.7,
+          10.0,
+          10.2
+        ],
+        "station": 4
+      },
+      {
+        "floor": 2,
+        "id": "family",
+        "kind": "living",
+        "name": "Family room",
+        "rect": [
+          -4.4,
+          -8.8,
+          13.2,
+          6.2
+        ],
+        "station": 5
+      },
+      {
+        "floor": 2,
+        "id": "chef",
+        "kind": "kitchen",
+        "name": "Chef kitchen",
+        "rect": [
+          -4.4,
+          -14.7,
+          5.2,
+          5.6
+        ],
+        "station": 6
+      },
+      {
+        "floor": 2,
+        "id": "suite_l2",
+        "kind": "bedroom",
+        "name": "Suite / office",
+        "rect": [
+          1.0,
+          -14.7,
+          7.8,
+          5.6
+        ],
+        "station": 12
+      },
+      {
+        "floor": 1,
+        "id": "welcome",
+        "kind": "living",
+        "name": "Welcome + wine",
+        "rect": [
+          -15,
+          -4.65,
+          19,
+          9.3
+        ],
+        "station": 7
+      },
+      {
+        "floor": 1,
+        "id": "cinema",
+        "kind": "living",
+        "name": "Cinema / 9 seats",
+        "rect": [
+          -14.8,
+          -14.8,
+          9.8,
+          9.8
+        ],
+        "station": 8
+      },
+      {
+        "floor": 3,
+        "id": "primary",
+        "kind": "bedroom",
+        "name": "Primary bedroom",
+        "rect": [
+          -15,
+          4.65,
+          8.65,
+          7.55
+        ],
+        "station": 9
+      },
+      {
+        "floor": 3,
+        "id": "primary_bath",
+        "kind": "bath",
+        "name": "Primary bath",
+        "rect": [
+          -15,
+          1,
+          4.4,
+          3.65
+        ],
+        "station": 10
+      },
+      {
+        "floor": 3,
+        "id": "closet",
+        "kind": "service",
+        "name": "Dressing",
+        "rect": [
+          -10.6,
+          1,
+          4.25,
+          3.65
+        ],
+        "station": 10
+      },
+      {
+        "floor": 3,
+        "id": "suite_l3_1",
+        "kind": "bedroom",
+        "name": "Suite 2",
+        "rect": [
+          -15,
+          -15,
+          6,
+          9
+        ],
+        "station": 12
+      },
+      {
+        "floor": 3,
+        "id": "suite_l3_2",
+        "kind": "bedroom",
+        "name": "Suite 3",
+        "rect": [
+          -9,
+          -15,
+          6,
+          9
+        ],
+        "station": 12
+      },
+      {
+        "floor": 3,
+        "id": "suite_l3_3",
+        "kind": "bedroom",
+        "name": "Suite 4",
+        "rect": [
+          -3,
+          -15,
+          6,
+          9
+        ],
+        "station": 12
+      },
+      {
+        "floor": 3,
+        "id": "upper_lounge",
+        "kind": "living",
+        "name": "Lounge + 3 desks",
+        "rect": [
+          3,
+          -15,
+          8,
+          9
+        ],
+        "station": 11
+      },
+      {
+        "floor": "ADU",
+        "id": "adu_bed_1",
+        "kind": "bedroom",
+        "name": "ADU bedroom 1",
+        "rect": [
+          3.0,
+          -29,
+          7.5,
+          5
+        ],
+        "station": 13
+      },
+      {
+        "floor": "ADU",
+        "id": "adu_bed_2",
+        "kind": "bedroom",
+        "name": "ADU bedroom 2",
+        "rect": [
+          10.5,
+          -29,
+          7.5,
+          5
+        ],
+        "station": 13
+      },
+      {
+        "floor": "ADU",
+        "id": "adu_living",
+        "kind": "living",
+        "name": "ADU kitchen + living",
+        "rect": [
+          3,
+          -24,
+          15,
+          5
+        ],
+        "station": 13
+      },
+      {
+        "floor": 2,
+        "id": "fitness",
+        "kind": "living",
+        "name": "Gym + sauna",
+        "rect": [
+          -22,
+          -14,
+          7,
+          10
+        ],
+        "station": 14
+      }
+    ],
+    "source": "https://villaanahid.com/details-main-residence/",
+    "stats": "MAIN HOUSE  5 BEDROOMS   /   DETACHED ADU  2 BEDROOMS",
+    "visual_version": 3
+  },
+  "waypoints": [
+    {
+      "name": "The arrival",
+      "description": "Grounds / Terraced stone, oak and a three-storey stair.",
+      "position": [
+        27,
+        10.5,
+        29
+      ],
+      "look_at": [
+        -1,
+        5.7,
+        3
+      ],
+      "floor": 0
+    },
+    {
+      "name": "The atrium",
+      "description": "L1 / A continuous stair with open landings on each floor.",
+      "position": [
+        0.1,
+        1.8,
+        14.1
+      ],
+      "look_at": [
+        -3.4,
+        4.1,
+        8
+      ],
+      "floor": 1
+    },
+    {
+      "name": "Living & dining",
+      "description": "L2 / Two crescent sofas around an oval table; dining beyond.",
+      "position": [
+        0.55,
+        5.8,
+        4.8
+      ],
+      "look_at": [
+        5.25,
+        5.15,
+        0.5
+      ],
+      "floor": 2
+    },
+    {
+      "name": "Pool pavilion",
+      "description": "Grounds / A 56-foot pool and garden seating.",
+      "position": [
+        21,
+        5.9,
+        13.5
+      ],
+      "look_at": [
+        6,
+        5.7,
+        0.5
+      ],
+      "floor": 0
+    },
+    {
+      "name": "The main kitchen",
+      "description": "L2 / Two marble waterfall islands, gas range and integrated appliances.",
+      "position": [
+        -5.1,
+        5.85,
+        -5.4
+      ],
+      "look_at": [
+        -10.3,
+        5.35,
+        -11.5
+      ],
+      "floor": 2
+    },
+    {
+      "name": "The family room",
+      "description": "L2 / The family lounge opens directly to the main kitchen.",
+      "position": [
+        0.85,
+        5.85,
+        -3.1
+      ],
+      "look_at": [
+        6.2,
+        5.2,
+        -6.5
+      ],
+      "floor": 2
+    },
+    {
+      "name": "The chef kitchen",
+      "description": "L2 / A separate working kitchen behind the family room.",
+      "position": [
+        -0.25,
+        5.8,
+        -10.0
+      ],
+      "look_at": [
+        -2,
+        5.35,
+        -13.2
+      ],
+      "floor": 2
+    },
+    {
+      "name": "Welcome & wine",
+      "description": "L1 / Living wall, travertine fireplace and onyx wine display.",
+      "position": [
+        1.8,
+        1.7,
+        3.5
+      ],
+      "look_at": [
+        -5.7,
+        1.55,
+        -2.2
+      ],
+      "floor": 1
+    },
+    {
+      "name": "The cinema",
+      "description": "L1 / Nine recliners on three stepped rows.",
+      "position": [
+        -6.1,
+        2.25,
+        -6.2
+      ],
+      "look_at": [
+        -10.0,
+        1.9,
+        -12
+      ],
+      "floor": 1
+    },
+    {
+      "name": "Primary retreat",
+      "description": "L3 / One primary bedroom with a separate bath and dressing room.",
+      "position": [
+        -7.1,
+        10.1,
+        11.3
+      ],
+      "look_at": [
+        -11,
+        9.4,
+        7.0
+      ],
+      "floor": 3
+    },
+    {
+      "name": "Bath & dressing",
+      "description": "L3 / Onyx, an open oval bath and bespoke oak joinery.",
+      "position": [
+        -10.85,
+        10.0,
+        4.25
+      ],
+      "look_at": [
+        -13.0,
+        9.6,
+        2.4
+      ],
+      "floor": 3
+    },
+    {
+      "name": "Upper lounge",
+      "description": "L3 / Three workstations and a shared lounge beside three bedroom suites.",
+      "position": [
+        9.95,
+        10.05,
+        -6.55
+      ],
+      "look_at": [
+        6.4,
+        9.65,
+        -11.5
+      ],
+      "floor": 3
+    },
+    {
+      "name": "Bedroom suite",
+      "description": "L2 / The fifth main-house bedroom can also serve as an office.",
+      "position": [
+        7.7,
+        5.85,
+        -9.85
+      ],
+      "look_at": [
+        4.2,
+        5.1,
+        -11.3
+      ],
+      "floor": 2
+    },
+    {
+      "name": "The guest residence",
+      "description": "ADU / A distinct two-bedroom home with its own kitchen and sitting area.",
+      "position": [
+        16.8,
+        10.1,
+        -19.7
+      ],
+      "look_at": [
+        8.0,
+        9.6,
+        -23.2
+      ],
+      "floor": 4
+    },
+    {
+      "name": "Fitness & sauna",
+      "description": "L2 / Exercise room with a glass-fronted sauna.",
+      "position": [
+        -15.8,
+        5.9,
+        -4.8
+      ],
+      "look_at": [
+        -19.0,
+        5.5,
+        -11.0
+      ],
+      "floor": 2
+    },
+    {
+      "name": "The architecture",
+      "description": "Grounds / Schematic reconstruction, not a measured as-built survey.",
+      "position": [
+        37,
+        31,
+        28
+      ],
+      "look_at": [
+        -1,
+        4,
+        -5
+      ],
+      "floor": 0
+    }
+  ]
+}
