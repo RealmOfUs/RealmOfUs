@@ -1,13 +1,20 @@
-# 原创校准街区
+# Original calibration scenes
 
-50 个实体，包含道路、房屋、树木、跨块展廊与不等长彩色坐标轴。原创场景内容声明为 CC0-1.0，用于比较分块目录和验证 Blender → GLB → Godot 的尺寸、方向及边界。
+`create_scene.py` builds a 50-entity street with roads, houses, trees, a cross-chunk gallery and unequal coloured axes. The original content is declared CC0-1.0 and is used to compare chunk catalogs and to verify size, orientation and bounds through Blender → GLB → Godot.
 
 ```bash
 blender --background --factory-startup --python-exit-code 1 --python examples/calibration/create_scene.py
 ```
 
-默认输出 `build/s1-2.1/`；使用 `-- --output build/my-calibration` 可以另存。完整工程为 `neighborhood.blend`，预览目录为 `preview/`，同一几何分别索引到 16/32/64 米分块。
+The default output is `build/s1-2.1/`; pass `-- --output build/my-calibration` to write elsewhere. The complete project is `neighborhood.blend`, the preview directory `preview/`, and the same geometry is indexed at 16/32/64 m chunks. Build the native library first with `cargo build -p rou-ffi` inside `rou/`.
 
-运行前先在项目的 `rou/` 目录执行 `cargo build -p rou-ffi`。
+`create_git_scene.py` generates the small Git realm used by the [tutorial](../../doc/tutorial.md) and the acceptance harness: four entities (house, plaque, bench, far_tree) with a shared linked library and an external texture, written directly into an initialised `rou` repository:
 
-S1.1 的独立统计使用 `toolchain/fixtures/calibration.json` 中已经审阅的元数据；重新生成 Blender 场景会产生新的源库文件和相应哈希，不会自动替换历史实验输入。
+```bash
+blender --background --factory-startup --python-exit-code 1 \
+  --python examples/calibration/create_git_scene.py -- --repo /path/to/realm
+```
+
+`--edit house|bench` applies a scripted modelling change to the saved source, standing in for an interactive Blender session; `--reopen <entity>` opens the source and verifies that its dependencies are present.
+
+Standalone statistics use the reviewed metadata in `toolchain/fixtures/calibration.json`; regenerating the Blender scene produces new source files and hashes and does not replace the reviewed inputs.
