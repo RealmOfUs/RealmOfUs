@@ -54,11 +54,6 @@ def main():
     if not a.name.strip() or any((char in a.name for char in '/\\\n\r"')) or a.name in {".", ".."}:
         p.error("Choose a simple application name")
     a.realm = a.realm.resolve()
-    subprocess.run(
-        ["cargo", "build", "-p", "rou-godot", "-p", "rou-ffi", "--release"],
-        cwd=ROOT / "rou",
-        check=True,
-    )
     system = {"darwin": "macos", "win32": "windows"}.get(sys.platform, "linux")
     if a.platform not in [system]:
         p.error(
@@ -67,8 +62,12 @@ def main():
     suffix = {"macos": ".dylib", "windows": ".dll", "linux": ".so"}[system]
     prefix = "" if system == "windows" else "lib"
     extension = prefix + "rou_godot" + suffix
-    (project / "bin").mkdir(exist_ok=True)
-    shutil.copy2(ROOT / "rou/target/release" / extension, project / "bin" / extension)
+    for artifact, target in (
+        (project / "bin" / extension, "godot-ext"),
+        (ROOT / "rou/target/release" / (prefix + "rou" + suffix), "ffi"),
+    ):
+        if not artifact.is_file():
+            p.error(f"missing {artifact.relative_to(ROOT)}; run `make {target}` first")
     os.environ["ROU_LIB"] = str(ROOT / "rou/target/release" / (prefix + "rou" + suffix))
     spec = importlib.util.spec_from_file_location(
         "rou_package_core", ROOT / "toolchain/blender/rou_blender/core.py"

@@ -25,7 +25,7 @@ godot --path client/app -- --realm="$PWD/build/walsh-v3-2.1/preview/realm.json" 
   --sample=villa-anahid --sample-data="$PWD/build/walsh-v3-2.1/sample.json" --station=0
 ```
 
-Modelling accepts `-- --output build/my-villa` and verification `--scene build/my-villa`. The default output is `build/walsh-v3-2.1/`. Run `cargo build --workspace` inside `rou/` first; preparing the viewer's native library is described in the root README. Desktop export uses `toolchain/build/package_viewer.py`.
+Modelling accepts `-- --output build/my-villa` and verification `--scene build/my-villa`. The default output is `build/walsh-v3-2.1/`; `make examples` runs both generators. `make ffi` and `make godot-ext` provide the native libraries; desktop export is `make viewer REALM=build/walsh-v3-2.1/preview/realm.json`.
 
 The sample's `sample.json` sits next to the source project and holds room descriptions and tour waypoints; it is not part of the `preview/` bundle. The generic viewer keeps its bounds-based start; it only jumps to sample waypoints when they are selected explicitly.
 

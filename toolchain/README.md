@@ -12,18 +12,17 @@ Production path: Rust `rou` → native Git/LFS → headless Blender → fixed-re
 
 ## Development checks
 
-Install the root `requirements-dev.txt` and run `cargo build --workspace` inside `rou/`. The Rust version is pinned by `rou/rust-toolchain.toml`. Complete checks:
+The root `Makefile` is the only build entry point; scripts under `build/` consume its products and stop with the target to run when one is missing. The Rust version is pinned by `rou/rust-toolchain.toml`; `make check` creates `.venv` from `requirements-dev.txt` (Ruff and gdtoolkit) on first use.
 
 ```bash
-.cache/s1-validation-venv/bin/python toolchain/build/check_code.py
-pushd rou
-cargo test --workspace
-popd
-.cache/s1-validation-venv/bin/python toolchain/build/verify_spatial.py
-.cache/s1-validation-venv/bin/python toolchain/build/verify_git_realm.py --windowed
+make check                 # cargo fmt/clippy/doc, Ruff, gdformat
+make test-rust             # cargo test --workspace
+make test-spatial          # reviewed spatial cases through the Godot extension
+make test-git              # two-author Git/LFS flow with real Blender and headless Godot
+make test                  # all three
 ```
 
-`verify_spatial.py` builds the native GDExtension and copies it to `client/app/bin/`. `verify_git_realm.py` builds the CLI and the extension, performs every Git operation inside a fresh acceptance directory, and records each command, result and log; it never touches the source repository's index.
+`verify_git_realm.py` performs every Git operation inside a fresh acceptance directory and records each command, result and log; it never touches the source repository's index. Run it directly to watch Godot in a window: `python3 toolchain/build/verify_git_realm.py --windowed`.
 
 On macOS the generated header can be exercised from C to check the ABI, success and error envelopes and release:
 
@@ -38,13 +37,8 @@ build/rust-validation/ffi-c-smoke
 ## Blender extension
 
 ```bash
-python3 toolchain/build/package_addon.py --output dist/rou_blender.zip
-blender --background --factory-startup --python-exit-code 1 \
-  --python toolchain/tests/blender/verify_addon.py -- \
-  --addon-zip "$PWD/dist/rou_blender.zip" --output "$PWD/build/addon-preview-check"
-blender --background --factory-startup --python-exit-code 1 \
-  --python toolchain/tests/blender/verify_git_authoring.py -- \
-  --addon-zip "$PWD/dist/rou_blender.zip" --output "$PWD/build/addon-authoring-check"
+make addon                 # dist/rou_blender.zip with the native library for this machine
+make test-addon            # local preview, authoring session and real install checks
 ```
 
 The ZIP uses the Blender 4.2+ extension manifest: Python modules and `blender_manifest.toml` at the root, and `lib/<platform>/` carrying the release library for the current machine architecture, so the package never depends on the development `target/` directory. The display name is Realm of Us, the extension ID `rou_blender`, and operators stay `rou.*`. Install through Preferences → Install from Disk, then use the Realm tab in the 3D viewport's N panel.
@@ -55,18 +49,7 @@ Author roots are located by the object's `rou_entity_id`; the Scene property `ro
 
 After renaming a registered author root, run "register entities" before saving and building. Complete save and "save source only" both check that entry names match the current author roots and write nothing on failure. A native Blender save bypasses the add-on buttons; the next `rou build` checks the persisted author identity against the frozen snapshot's entity associations and refuses to export when a name drifted or an author root is missing, asking you to register and save again.
 
-The real Preferences install and enable/disable test runs in an isolated directory so it never writes your user configuration:
-
-```bash
-ADDON_CHECK_DIR="$(mktemp -d "$PWD/build/addon-install.XXXXXX")"
-mkdir -p "$ADDON_CHECK_DIR/user/config" "$ADDON_CHECK_DIR/user/scripts"
-BLENDER_USER_RESOURCES="$ADDON_CHECK_DIR/user" \
-BLENDER_USER_CONFIG="$ADDON_CHECK_DIR/user/config" \
-BLENDER_USER_SCRIPTS="$ADDON_CHECK_DIR/user/scripts" \
-blender --background --factory-startup --python-exit-code 1 \
-  --python toolchain/tests/blender/verify_addon_install.py -- \
-  --addon-zip "$PWD/dist/rou_blender.zip" --output "$ADDON_CHECK_DIR"
-```
+The real Preferences install and enable/disable test in `make test-addon` runs with `BLENDER_USER_*` pointed at `build/addon-install/`, so it never writes your user configuration.
 
 The add-on's local preview writes only `realm.json` and `objects/`; without a version sidecar the viewer shows the bundle as unbound. Git staging and commits stay explicit author actions; the session guard cannot intercept external programs or native Blender saves.
 
@@ -83,11 +66,9 @@ A normal install, or loading after removing the quarantine attribute by hand, pa
 Run `rou view` to produce a fixed-revision directory, then package it with the native extension for the current platform:
 
 ```bash
-python3 toolchain/build/fetch_templates.py
-python3 toolchain/build/package_viewer.py --platform macos \
-  --realm /absolute/path/to/view/realm.json --output-dir dist/viewer-2.1
+make viewer REALM=/path/to/view/realm.json          # fetches export templates, writes dist/viewer/
 python3 toolchain/build/verify_git_viewer.py \
-  --app "dist/viewer-2.1/macos/Realm of Us.app" \
+  --app "dist/viewer/macos/Realm of Us.app" \
   --output build/viewer-acceptance --seconds 12 --activate --at=12,3,5
 ```
 

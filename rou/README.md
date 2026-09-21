@@ -57,7 +57,7 @@ fixture is `crates/rou-core/tests/fixtures/spatial.json`; Godot reads that same 
 
 ## Build and run
 
-Run Cargo from `rou/` so rustup selects the pinned toolchain. From the project root:
+The root `Makefile` (`make rou`, `make godot-ext`, `make ffi`, `make addon`) is the entry point that places products where the tools expect them. For direct Cargo use, run it from `rou/` so rustup selects the pinned toolchain. From the project root:
 
 ```bash
 pushd rou

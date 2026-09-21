@@ -32,7 +32,11 @@ def library_path():
     # Source checkout only; installed archives always carry their own library.
     for parent in Path(__file__).resolve().parents:
         if (parent / "rou/crates/rou-ffi/Cargo.toml").is_file():
-            return parent / "rou/target/debug" / filename
+            for profile in ("release", "debug"):
+                candidate = parent / "rou/target" / profile / filename
+                if candidate.is_file():
+                    return candidate
+            return parent / "rou/target/release" / filename
     raise RouError("library_missing", f"Realm library missing for {system}-{machine}")
 
 

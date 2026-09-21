@@ -9,13 +9,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
-from toolchain.build.native import build_native
+from toolchain.build.native import ffi_library, godot_extension
 
 
 def main():
     out = ROOT / "build/s1-2.1/spatial-checks"
     out.mkdir(parents=True, exist_ok=True)
-    build_native("rou-godot", "rou-ffi")
+    godot_extension()
+    ffi_library()
     commands = {
         "rust": [
             "cargo",

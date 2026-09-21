@@ -2,8 +2,6 @@
 
 import importlib.util
 import os
-import shutil
-import subprocess
 import sys
 from pathlib import Path
 
@@ -16,20 +14,25 @@ def library(name: str) -> str:
     return "lib" + name + (".dylib" if sys.platform == "darwin" else ".so")
 
 
-def build_native(*crates: str, release: bool = False) -> None:
-    command = ["cargo", "build"]
-    for crate in crates:
-        command += ["-p", crate]
-    if release:
-        command.append("--release")
-    subprocess.run(command, cwd=ROOT / "rou", check=True)
-    target = ROOT / "rou/target" / ("release" if release else "debug")
-    if "rou-godot" in crates:
-        destination = ROOT / "client/app/bin"
-        destination.mkdir(exist_ok=True)
-        shutil.copy2(target / library("rou_godot"), destination / library("rou_godot"))
-    if "rou-ffi" in crates:
-        os.environ["ROU_LIB"] = str(target / library("rou"))
+def artifact(path: Path, target: str) -> Path:
+    """Return a build product or explain which Makefile target creates it."""
+    if not path.is_file():
+        raise SystemExit(f"missing {path.relative_to(ROOT)}; run `make {target}` first")
+    return path
+
+
+def cli() -> Path:
+    return artifact(ROOT / "build/bin/rou", "rou")
+
+
+def godot_extension() -> Path:
+    return artifact(ROOT / "client/app/bin" / library("rou_godot"), "godot-ext")
+
+
+def ffi_library() -> Path:
+    path = artifact(ROOT / "rou/target/release" / library("rou"), "ffi")
+    os.environ.setdefault("ROU_LIB", str(path))
+    return path
 
 
 def load_core():

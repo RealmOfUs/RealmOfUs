@@ -13,12 +13,13 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def package_addon(destination: Path) -> Path:
-    subprocess.run(["cargo", "build", "-p", "rou-ffi", "--release"], cwd=ROOT / "rou", check=True)
     system = {"darwin": "macos", "win32": "windows"}.get(sys.platform, "linux")
     machine = "arm64" if platform.machine().lower() in {"arm64", "aarch64"} else "x64"
     target = f"{system}-{machine}"
     filename = {"macos": "librou.dylib", "windows": "rou.dll", "linux": "librou.so"}[system]
     library = ROOT / "rou/target/release" / filename
+    if not library.is_file():
+        raise SystemExit(f"missing {library.relative_to(ROOT)}; run `make ffi` first")
     source = ROOT / "toolchain/blender/rou_blender"
     destination.parent.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="rou-addon-") as temporary:

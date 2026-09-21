@@ -6,18 +6,16 @@ Baseline 2.1 is implemented in Rust and accepted on the development machine (mac
 
 | Check | Command | Result on the current tree |
 | --- | --- | --- |
-| Rust format, lint and tests | `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` in `rou/` | 71 tests including doc tests |
-| Python and GDScript lint | `toolchain/build/check_code.py` | Ruff and gdformat clean |
-| Spatial contract | `toolchain/build/verify_spatial.py` | 77 reviewed cases, 110 headless Godot assertions |
-| Two-author Git/LFS flow with real Blender and Godot | `toolchain/build/verify_git_realm.py` | 27 flow checks, 58 commands, 104 Godot checks |
-| Blender authoring session | `toolchain/tests/blender/verify_git_authoring.py` | 42 checks including linked libraries, shared instances, rename, undo and reload |
-| Blender local preview | `toolchain/tests/blender/verify_addon.py` | 10 checks |
-| Real extension install and lifecycle | `toolchain/tests/blender/verify_addon_install.py` in an isolated user directory | 62 checks |
+| Rust tests | `make test-rust` | 71 tests including doc tests |
+| Format, lint and doc checks | `make check` | cargo fmt/clippy/doc, Ruff and gdformat clean |
+| Spatial contract | `make test-spatial` | 77 reviewed cases, 110 headless Godot assertions |
+| Two-author Git/LFS flow with real Blender and Godot | `make test-git` | 27 flow checks, 58 commands, 104 Godot checks |
+| Blender extension: local preview, authoring session, real install | `make test-addon` | 10 + 42 + 62 checks, including linked libraries, shared instances, rename, undo and reload |
 | Godot local workflow | `client/tests/local_workflow.gd` via the preview harness | 28 checks |
 | C ABI | `rou/crates/rou-ffi/tests/c_smoke.c` | Compiles and runs |
 | Fuzzing | `cargo +nightly fuzz run` on `json_strict`, `glb_precheck`, `lfs_pointer` | Millions of iterations without a crash; not run on every change |
 
-Deliverables are local products under `build/` and `dist/` and are not versioned: the release CLI `build/bin/rou`, the add-on `dist/rou_blender.zip` with the macOS arm64 native library, and a standalone viewer app.
+Deliverables are local products under `build/` and `dist/` and are not versioned: `make rou` builds the release CLI `build/bin/rou`, `make addon` the extension `dist/rou_blender.zip` with this machine's native library, and `make viewer REALM=...` a standalone viewer app.
 
 ## Known limits
 

@@ -4,12 +4,11 @@ This walkthrough exercises every core feature with the CC0 calibration sample: c
 
 ## 0. Prerequisites
 
-Git, Git LFS, Blender 4.2+ and Godot 4.7 on your PATH, plus a built `rou`:
+Git, Git LFS, Blender 4.2+ and Godot 4.7 on your PATH, plus the CLI and the viewer extension built through the Makefile:
 
 ```bash
 cd /path/to/RealmOfUs
-pushd rou && cargo build --release -p rou && popd
-mkdir -p build/bin && cp rou/target/release/rou build/bin/rou
+make rou godot-ext                    # build/bin/rou and client/app/bin/librou_godot.*
 export ROU_TOOLCHAIN_ROOT="$PWD"      # lets rou find the Blender export helper
 export PATH="$PWD/build/bin:$PATH"
 mkdir -p /tmp/realm-tutorial && cd /tmp/realm-tutorial
@@ -65,7 +64,7 @@ ls .rou/view/first        # objects  realm.json  version.json
 godot --path "$ROU_TOOLCHAIN_ROOT/client/app" -- --realm="$PWD/.rou/view/first/realm.json"
 ```
 
-`realm.json` is the runtime catalog (profile, entities with world bounds, complete chunk index); `version.json` binds it to the commit; `objects/` holds the GLBs named by SHA-256. The viewer starts above the centre of the world; pick a place from the chunk map, the entity list or typed coordinates, or pass `--at=12,3,5`. Copy the Godot native library first if you have not: `cp rou/target/release/librou_godot.dylib client/app/bin/` (`.so` on Linux, `.dll` on Windows).
+`realm.json` is the runtime catalog (profile, entities with world bounds, complete chunk index); `version.json` binds it to the commit; `objects/` holds the GLBs named by SHA-256. The viewer starts above the centre of the world; pick a place from the chunk map, the entity list or typed coordinates, or pass `--at=12,3,5`.
 
 ## 4. Publish to a remote
 
@@ -185,7 +184,7 @@ Shrinking never deletes history. Local edits in directories that would leave the
 
 The scripted `--edit` steps above are what a real session does through the add-on:
 
-1. Package and install it once: `python3 toolchain/build/package_addon.py --output dist/rou_blender.zip`, then Preferences → Add-ons → Install from Disk. Reopen the author project afterwards; the Realm tab appears in the 3D viewport's N panel.
+1. Package and install it once: `make addon`, then Preferences → Add-ons → Install from Disk with `dist/rou_blender.zip`. Reopen the author project afterwards; the Realm tab appears in the 3D viewport's N panel.
 2. In a clone with the relevant sources selected, open the `.blend` from `sources/`. The panel shows the session: revision, source and its models and entities.
 3. Edit geometry inside an entity root, then use **Save complete source**. Move an entity root and use **Write placement changes** to update `realm/entities/<id>.json`; the JSON is the authority, a plain Ctrl+S never changes placement.
 4. To add an entity, create a top-level object, use **Mark selected objects as entities**, then **Register marked entities** and save. Registration writes the model and entity JSON and records which object owns the model, so renaming the root later is handled by registering again before saving.

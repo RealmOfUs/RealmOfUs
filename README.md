@@ -24,14 +24,10 @@ A realm's `realm.json` holds only `format`, `id` and `profile` and is immutable 
 
 Requires Git, Git LFS, Blender 4.2+ and Godot 4.7. Acceptance uses Blender 5.2.1, Godot 4.7.2 and macOS arm64; `rou/rust-toolchain.toml` pins Rust 1.94.0. Other platforms are untested on real hardware.
 
+All build and verification entry points are Makefile targets; `make help` lists them.
+
 ```bash
-pushd rou
-cargo build --workspace
-popd
-mkdir -p build/bin client/app/bin
-cp rou/target/debug/rou build/bin/rou
-# macOS; Linux uses .so, Windows uses rou_godot.dll.
-cp rou/target/debug/librou_godot.dylib client/app/bin/
+make rou godot-ext          # build/bin/rou and the Godot extension in client/app/bin/
 export ROU_TOOLCHAIN_ROOT="$PWD"
 export PATH="$PWD/build/bin:$PATH"
 
@@ -55,17 +51,12 @@ The viewer starts above the centre of all entity bounds at a distance equal to t
 ## Verification
 
 ```bash
-python3 -m venv .cache/s1-validation-venv
-.cache/s1-validation-venv/bin/python -m pip install -r requirements-dev.txt
-.cache/s1-validation-venv/bin/python toolchain/build/check_code.py
-pushd rou
-cargo test --workspace
-popd
-.cache/s1-validation-venv/bin/python toolchain/build/verify_spatial.py
-.cache/s1-validation-venv/bin/python toolchain/build/verify_git_realm.py --windowed
+make check          # cargo fmt/clippy/doc, Ruff, gdformat (creates .venv on first use)
+make test           # Rust tests, spatial cases, two-author Git/LFS flow with Blender and Godot
+make test-addon     # Blender extension: preview, authoring session, real install
 ```
 
-The last command creates a real Blender scene and an isolated bare Git/LFS remote in a fresh build directory and checks two-author collaboration, selection, reopening original projects, parallel edits, merge and fixed-revision viewing. Add-on installation, standalone app packaging and the empty-PATH acceptance run are described in the [toolchain guide](toolchain/README.md). Current results and known limits are in [status.md](doc/status.md).
+`make test-git` creates a real Blender scene and an isolated bare Git/LFS remote in a fresh build directory and checks two-author collaboration, selection, reopening original projects, parallel edits, merge and fixed-revision viewing. Packaging (`make addon`, `make viewer REALM=...`) and the standalone-app acceptance run are described in the [toolchain guide](toolchain/README.md). Current results and known limits are in [status.md](doc/status.md).
 
 ## Samples
 

@@ -14,6 +14,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from toolchain.build import native  # noqa: E402
 
 
 class Acceptance:
@@ -126,8 +128,7 @@ class Acceptance:
         return [item for item in path.rglob("*") if item.is_file()]
 
     def execute(self, windowed: bool, git_only: bool = False) -> None:
-        self.run(["cargo", "build", "-p", "rou"], cwd=ROOT / "rou")
-        shutil.copy2(ROOT / "rou/target/debug/rou", self.binary)
+        shutil.copy2(native.cli(), self.binary)
         official, remote, alice, bob = [
             self.directory / name for name in ("official", "remote.git", "alice", "bob")
         ]
@@ -268,12 +269,7 @@ class Acceptance:
         self.rou(alice, "sparse", "list")
         self.check("reversed range covers nine chunks", len(resolved["resolution"]["chunks"]) == 9)
         if not git_only:
-            self.run(["cargo", "build", "-p", "rou-godot"], cwd=ROOT / "rou")
-            project = ROOT / "client/app"
-            (project / "bin").mkdir(exist_ok=True)
-            shutil.copy2(
-                ROOT / "rou/target/debug/librou_godot.dylib", project / "bin/librou_godot.dylib"
-            )
+            native.godot_extension()
             godot = ["godot"] + ([] if windowed else ["--headless"])
             self.run(
                 godot

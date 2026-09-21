@@ -6,7 +6,7 @@
 blender --background --factory-startup --python-exit-code 1 --python examples/calibration/create_scene.py
 ```
 
-The default output is `build/s1-2.1/`; pass `-- --output build/my-calibration` to write elsewhere. The complete project is `neighborhood.blend`, the preview directory `preview/`, and the same geometry is indexed at 16/32/64 m chunks. Build the native library first with `cargo build -p rou-ffi` inside `rou/`.
+`make examples` runs this and the Villa Anahid generator. The default output is `build/s1-2.1/`; pass `-- --output build/my-calibration` to write elsewhere. The complete project is `neighborhood.blend`, the preview directory `preview/`, and the same geometry is indexed at 16/32/64 m chunks. The native library must exist (`make ffi`).
 
 `create_git_scene.py` generates the small Git realm used by the [tutorial](../../doc/tutorial.md) and the acceptance harness: four entities (house, plaque, bench, far_tree) with a shared linked library and an external texture, written directly into an initialised `rou` repository:
 
