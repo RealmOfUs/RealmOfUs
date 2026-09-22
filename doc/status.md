@@ -14,10 +14,19 @@ Baseline 2.1 is implemented in Rust and accepted on the development machine (mac
 | Standalone viewer | `make viewer`, then the exported-app runtime harness | macOS arm64: no embedded world, startup chooser observed, external bundle loads with an empty authoring-tool PATH |
 | Tutorial command replay | [Tutorial](tutorial.md), replayed through Make in `/tmp` | Six exact text blocks and three build summaries checked; two real-window opens and the JSON diff passed |
 | Godot local workflow | `client/tests/local_workflow.gd` via the preview harness | Previously 28 checks; not rerun in this change |
+| Hosted platform over HTTP (local Forgejo 11 in Docker) | `make forgejo-up` then `make test-forgejo` | 20 checks, 38 commands: authenticated push with LFS, cold clone, region hydration over HTTP, two pull requests merged on the platform without a local rebuild, `pull` fast-forward and validation of the platform merge, anonymous clone and anonymous LFS batch download of a public repository, non-collaborator push rejected |
 | C ABI | `rou/crates/rou-ffi/tests/c_smoke.c` | Previously compiled and run; this change reran Rust FFI tests and Blender native calls |
 | Fuzzing | `cargo +nightly fuzz run` on `json_strict`, `glb_precheck`, `lfs_pointer` | Millions of iterations without a crash; not run on every change |
 
 Deliverables are local products under `build/` and `dist/` and are not versioned: `make rou` builds the release CLI `build/bin/rou`, `make addon` the extension `dist/rou_blender.zip` with this machine's native library, and `make viewer` an independent viewer app under `dist/viewer/`. The viewer is a platform release artifact that opens any browse bundle; it embeds no world and needs no authoring tools at runtime. This checkout produces local artifacts; publication and distribution signing are separate.
+
+## Hosting
+
+A plain Git host with LFS is sufficient for authoring collaboration; no rou changes were needed. Observed on Forgejo 11.0 with a public repository:
+
+- Anonymous `rou clone` and `rou sparse set` work: history and pointers come over smart HTTP, payloads over the LFS batch API without credentials. Pushing requires a collaborator token; a non-collaborator's push is rejected by the platform.
+- Independent contributions on separate branches are mergeable through the platform's pull-request merge; the merge commit validates locally without any rebuild. Pull-request diffs show the multi-line model, entity and build-record JSON line by line, and LFS-tracked files as pointer changes.
+- The acceptance run embeds tokens in the remote URL; a credential helper works equally. GitHub was not exercised; its LFS storage and bandwidth quotas are the main difference and are documented by GitHub.
 
 ## Known limits
 

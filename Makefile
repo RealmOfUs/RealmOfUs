@@ -35,7 +35,7 @@ ADDON     := dist/rou_blender.zip
 
 export ROU_TOOLCHAIN_ROOT := $(ROOT)
 
-.PHONY: help all rou godot-ext ffi addon viewer examples check test test-rust test-spatial test-git test-addon fuzz clean
+.PHONY: help all rou godot-ext ffi addon viewer examples check test test-rust test-spatial test-git test-addon test-forgejo forgejo-up forgejo-down forgejo-reset fuzz clean
 
 help: ## List targets
 	@grep -E '^[a-z][a-z-]*:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -92,6 +92,22 @@ test-addon: addon ## Blender extension: local preview, authoring session, real i
 	mkdir -p build/addon-install/user/config build/addon-install/user/scripts
 	BLENDER_USER_RESOURCES="$(ROOT)/build/addon-install/user" BLENDER_USER_CONFIG="$(ROOT)/build/addon-install/user/config" BLENDER_USER_SCRIPTS="$(ROOT)/build/addon-install/user/scripts" \
 	  $(BLENDER) --background --factory-startup --python-exit-code 1 --python toolchain/tests/blender/verify_addon_install.py -- --addon-zip "$(ROOT)/$(ADDON)" --output "$(ROOT)/build/addon-install"
+
+COMPOSE := docker compose -p rou-forgejo -f toolchain/forgejo/compose.yaml
+
+forgejo-up: ## Start the local Forgejo container and prepare users, tokens and the garden repository
+	$(COMPOSE) up -d
+	$(PYTHON) toolchain/forgejo/bootstrap.py
+
+forgejo-down: ## Stop the local Forgejo container (data volume kept)
+	$(COMPOSE) down
+
+forgejo-reset: ## Stop Forgejo and delete its data volume and local credentials
+	$(COMPOSE) down -v
+	rm -rf .cache/forgejo
+
+test-forgejo: rou ## Two-author flow over HTTP against the local Forgejo (needs make forgejo-up)
+	$(PYTHON) toolchain/build/verify_forgejo.py
 
 fuzz: ## Run the three libFuzzer targets for 60 s each (needs nightly and cargo-fuzz)
 	cd rou && for t in json_strict glb_precheck lfs_pointer; do $(CARGO) +nightly fuzz run $$t -- -max_total_time=60; done

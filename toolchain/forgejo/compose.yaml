@@ -1,0 +1,22 @@
+# Local Forgejo instance for hosted-platform acceptance (Git over HTTP plus Git LFS).
+# Start with `make forgejo-up`; credentials are written under .cache/forgejo/ and never committed.
+services:
+  forgejo:
+    image: codeberg.org/forgejo/forgejo:11
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - FORGEJO__server__ROOT_URL=http://localhost:3000/
+      - FORGEJO__server__HTTP_PORT=3000
+      - FORGEJO__server__LFS_START_SERVER=true
+      - FORGEJO__service__DISABLE_REGISTRATION=true
+      - FORGEJO__security__INSTALL_LOCK=true
+      - FORGEJO__database__DB_TYPE=sqlite3
+      - FORGEJO__database__PATH=/data/gitea/forgejo.db
+    volumes:
+      - forgejo-data:/data
+    ports:
+      - "3000:3000"
+      - "2222:22"
+volumes:
+  forgejo-data:

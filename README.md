@@ -56,6 +56,7 @@ The viewer starts above the centre of all entity bounds at a distance equal to t
 make check          # cargo fmt/clippy/doc, Ruff, gdformat (creates .venv on first use)
 make test           # Rust tests, spatial cases, two-author Git/LFS flow with Blender and Godot
 make test-addon     # Blender extension: preview, authoring session, real install
+make forgejo-up && make test-forgejo   # two-author flow over HTTP against a local Forgejo in Docker
 ```
 
 `make test-git` creates a real Blender scene and an isolated bare Git/LFS remote in a fresh build directory and checks two-author collaboration, selection, reopening original projects, parallel edits, merge and fixed-revision viewing. Packaging (`make addon`, `make viewer`) and the standalone-app acceptance run are described in the [toolchain guide](toolchain/README.md). Current results and known limits are in [status.md](doc/status.md).

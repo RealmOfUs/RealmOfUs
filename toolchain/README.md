@@ -61,6 +61,19 @@ python toolchain/build/verify_addon_macos.py --addon-zip dist/rou_blender.zip --
 
 A normal install, or loading after removing the quarantine attribute by hand, passing does not mean a public download is admitted automatically; formal distribution still needs signing, notarisation and a real download-path acceptance.
 
+## Hosted platform acceptance
+
+`toolchain/forgejo/compose.yaml` runs Forgejo 11 with LFS in Docker; `toolchain/forgejo/bootstrap.py` waits for it, creates the users `realm` (admin), `alice`, `bob` (collaborators) and `mallory` (no access), issues API tokens into `.cache/forgejo/credentials.json` and creates the public repository `realm/garden`. `toolchain/build/verify_forgejo.py` recreates the repository through the API and runs the two-author flow over HTTP: push with LFS, cold clones, region hydration, platform-side pull-request merges, `pull` and validation of the merge, anonymous clone and LFS download, and a rejected push.
+
+```bash
+make forgejo-up        # start the container and bootstrap users, tokens and the repository
+make test-forgejo      # acceptance over HTTP; skipped with a message when Forgejo is not bootstrapped
+make forgejo-down      # stop, keep data
+make forgejo-reset     # stop, delete the data volume and local credentials
+```
+
+Ports 3000 (HTTP) and 2222 (SSH) are published; the compose project name is `rou-forgejo`, so other containers on the same Docker host are untouched.
+
 ## Standalone viewer
 
 The viewer app is an independent platform release: download a precompiled application and open any browse bundle. It embeds no world and opens a world chooser without `--realm`. Developers can export the application with its native extension for the current platform:

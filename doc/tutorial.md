@@ -102,6 +102,18 @@ cd ..
 
 `push` validates the exact commit it publishes and pushes the LFS objects reachable from it. It may restore missing historical payloads needed for publication, without widening the sparse checkout.
 
+### Using a hosted platform instead
+
+Any Git host with LFS works the same way. The repository ships a local Forgejo for this: `make forgejo-up` starts it in Docker (OrbStack on macOS), creates the users `realm`, `alice`, `bob` and the public repository `realm/garden`, and writes API tokens to `.cache/forgejo/credentials.json`. Replace the remote with the HTTP URL, embedding the token for authenticated users:
+
+```bash
+rou remote add origin http://realm:<token>@localhost:3000/realm/garden.git
+rou push -u origin main
+rou clone http://localhost:3000/realm/garden.git reader     # anonymous: history and pointers only
+```
+
+Anonymous clones of a public repository can select regions and download LFS payloads without an account; pushing needs write access on the platform. Pull requests opened on the platform for independent contributions are mergeable there without any local rebuild, because no shared index file is committed. `make test-forgejo` runs this whole flow, including two platform-side merges and a rejected push from a non-collaborator.
+
 ## 5. Alice clones and selects one chunk
 
 A clone downloads history and LFS pointers only. The selection decides which sources are materialised.
