@@ -21,25 +21,7 @@ Selection:
   rou sparse set --all
   Chunk ranges include BOTH endpoints; they are not Git commit ranges.
 
-Native Git commands (arguments are forwarded unchanged):
-  add       Stage explicit paths or other Git selections
-  rm        Remove paths from the worktree and/or index
-  mv        Move or rename tracked paths
-  restore   Restore worktree or staged paths
-  log       Show commit history
-  branch    List, create, rename or delete branches
-  reflog    Inspect local reference history
-  remote    Manage remotes
-  config    Read or write Git configuration
-  fetch     Fetch Git objects and refs
-  lfs       Run Git LFS commands
-  tag       List, create or delete tags
-  stash     Save or restore local changes
-  show      Show objects or commits
-  reset     Reset refs, index or worktree using Git's options
-  Inside a repository: rou add -h (Git usage), rou add --help (Git manual).
-  Outside a repository: git help add. For LFS: git lfs help <command>.
-  Native commands retain Git semantics; they do not run Realm validation.
+Any other command is forwarded to Git unchanged; run \"git help <command>\".
 
 Details:
   rou help sparse set
@@ -49,8 +31,8 @@ Details:
   Wrapped commands accept only the options shown in their help.
 
 Output:
-  Most Realm commands print a JSON report. status defaults to text;
-  native Git commands and plain diff keep Git's output and exit status.
+  Realm commands default to human-readable summaries; --json prints their JSON reports.
+  Native Git commands and plain diff keep Git's output and exit status.
   Realm operation errors go to stderr and exit with status 1;
   argument errors exit with status 2.";
 
@@ -128,7 +110,7 @@ pub const SPARSE_SET: &str = "Replace the saved local selection and materialize 
     selectors. Metadata stays available even when no entity intersects a selected chunk.\n\n\
     Shrinking refuses to remove modified, staged or untracked non-ignored files. \
     Ignored files outside the new cone are backed up under .rou/backups/. Returns \
-    resolved chunks, entity IDs, paths, directories and backup paths as JSON.";
+    resolved entities, payloads and backup paths; use --json for all report fields.";
 pub const SPARSE_SET_EXAMPLES: &str = "Examples:
   rou sparse set --chunk=-1,0,-1..1,0,1
   rou sparse set --chunk=0,0,0 --entity house
@@ -137,12 +119,12 @@ pub const SPARSE_ADD: &str = "Add selectors to the current local selection and m
     resulting LFS dependencies at HEAD. Requires at least one selector. Repeated \
     selectors and overlapping chunks are deduplicated. If the current or new selection \
     is --all, the result remains all; use sparse set to narrow it. Returns the resolved \
-    selection and backup paths as JSON.";
+    selection and backup paths; use --json for all report fields.";
 pub const SPARSE_ADD_EXAMPLES: &str = "Examples:
   rou sparse add --chunk=2,0,0..3,0,0
   rou sparse add --entity house --entity bench
   rou sparse add --all";
-pub const SPARSE_LIST: &str = "Print the saved selection as JSON with all, chunks and entities fields. \
+pub const SPARSE_LIST: &str = "Print the saved all, chunk and entity selectors on three lines; --json emits their JSON fields. \
     This is the selector configuration, not an expanded list of chunks or a check of \
     downloaded payload integrity. Does not change the worktree or download files.";
 
@@ -186,7 +168,7 @@ pub const STATUS_EXAMPLES: &str = "Examples:
 pub const DIFF: &str = "Without --realm, forward arguments to git diff unchanged, preserving \
     Git revision, index/worktree, path and output semantics. Paths are relative to \
     the calling directory. Use -- before paths that could look like revisions/options.\n\n\
-    With --realm before any -- separator, emit a JSON summary of entity/model, \
+    With --realm before any -- separator, show changes grouped by entity and model, including \
     placement, input and world-rule changes. This mode reads metadata and descriptors; \
     it does not download cold payloads, inspect geometry bytes or run Blender.";
 pub const DIFF_EXAMPLES: &str = "Realm forms (only these arguments are supported):
@@ -213,7 +195,7 @@ pub const BUILD: &str = "Build from a frozen snapshot of working files by defaul
     changed model inputs through Blender. Required cold LFS payloads may be fetched. \
     The build covers the logical world, not just the local sparse selection.\n\n\
     Write runtime/<model>.glb and runtime/<model>.json to the WORKTREE in both modes, \
-    remove obsolete runtime outputs, and report generated/reused/removed files as JSON. \
+    remove obsolete runtime outputs, and report generated/reused/removed files; --json emits the full report. \
     Never stage files or commit; explicitly rou add the intended inputs and outputs. \
     Resolve author-input conflicts first; stale or conflicted runtime outputs can be rebuilt.\n\n\
     In sparse worktrees, unselected runtime deletions or damaged GLBs report stale_runtime. \
@@ -312,17 +294,21 @@ pub const VIEW: &str = "Export a fixed committed Realm (default: HEAD) as a stan
     bundle. --worktree explicitly exports an already-built working draft instead; \
     it cannot be combined with REVISION. This command does not build or launch the viewer.\n\n\
     Writes realm.json (the complete catalog), version.json and objects/<sha256>.glb. \
-    Without --chunk, includes all entities' runtime assets. With --chunk, includes \
-    only intersecting entities' assets; the catalog STILL describes the whole world, \
-    so unselected assets are absent from this local bundle. Required GLBs may be \
-    fetched via LFS; authoring source payloads are not needed.\n\n\
+    By default, includes only locally available runtime assets in the saved sparse selection, \
+    without any network downloads. An empty selection produces a catalog-only bundle. \
+    --chunk and --entity select an explicit subset; --all selects every entity. Explicit \
+    selectors may fetch required GLBs via LFS, but never authoring sources. The complete \
+    catalog is retained, and missing models are shown as missing in the viewer. The same \
+    selection rules apply to --worktree. Local materialized GLBs use hard links with a \
+    copy fallback; treat bundle assets as read-only.\n\n\
     Bundles contain no viewing entry. The viewer derives a start from content or \
     lets the player choose; --at=x,y,z is a viewer argument in metres, not a rou view \
     option. A worktree bundle has no commit identity; local-trusted validation is \
-    not a public signature. Returns the catalog path and version details as JSON.";
+    not a public signature. Reports the catalog path and version details; --json emits the full report.";
 pub const VIEW_EXAMPLES: &str = "Examples:
   rou view
-  rou view v1 --output ../village-view
+  rou view v1 --all --output ../village-view
   rou view HEAD --chunk=-1,0,-1..1,0,1 --output .rou/view/nearby
+  rou view --entity house
   rou build
   rou view --worktree --output .rou/view/draft";

@@ -13,6 +13,7 @@ rou/
 |   |-- Cargo.toml                # Package and executable: rou
 |   |-- src/main.rs               # CLI parsing and dispatch
 |   |-- src/help.rs               # Detailed command help
+|   |-- src/report.rs             # Human-readable command reports
 |   `-- tests/git_workflow.rs     # Real Git/LFS CLI integration tests
 |-- crates/
 |   |-- rou-core/
@@ -93,10 +94,12 @@ difference from Git revision ranges and half-open spatial bounds. `diff --help`
 lists every supported domain-diff input form. Other commands document index versus
 worktree behavior, LFS downloads, build output, merges and browse bundles.
 
-Native Git commands retain the installed Git manual: inside a repository use
+Built-ins default to human-readable summaries and preserve Git operation output. Global `--json`, before or after a built-in command, emits the machine report. `rou view` exports locally available assets in the saved selection by default, without downloads; explicit `--chunk`/`--entity` or `--all` may fetch more runtime assets.
+
+Any other command is forwarded to Git unchanged. Native Git commands retain the installed Git manual: inside a repository use
 `rou add -h` for usage or `rou add --help` for the manual; outside use `git help add`.
 Replace `add` with the desired native command. Git LFS uses `git lfs help <command>`.
-`rou help <command>` applies to built-ins; native arguments are parsed by Git.
+`rou help <command>` also forwards native command help to Git; native arguments are parsed by Git.
 
 ## Core API and validation
 

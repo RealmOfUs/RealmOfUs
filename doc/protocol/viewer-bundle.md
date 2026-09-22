@@ -28,7 +28,7 @@ The first profile does not support spherical, toroidal or wrapping worlds, unbou
 
 `index_complete` must be the boolean `true`. After the complete index is validated, any chunk inside the world with no index entry is a known empty chunk; a whole world may have `entities: []` and `chunks: {}`. Covered chunks of existing entities must all be recorded, and the index must agree exactly with the entity AABBs; deleting an index entry cannot turn a populated chunk into an empty one. `index_complete: false`, a missing field or a non-boolean is rejected, so a missing index is never displayed as known-empty.
 
-A bundle always carries the complete metadata; `rou view --chunk` only affects which GLBs are included, and models not included are shown as missing, never as empty.
+A bundle always carries the complete metadata; `rou view` includes the saved selection by default without downloads; explicit `--chunk`/`--entity` or `--all` may download the requested GLBs, and models not included are shown as missing, never as empty.
 
 `profile_hash` is the SHA-256 of the RFC 8785 encoding of the profile and binds the parameters in the catalog; changed parameters with a stale hash are rejected. It is not world identity; lineage is enforced by the ancestor check in [repository.md § 2](repository.md#2-author-inputs).
 

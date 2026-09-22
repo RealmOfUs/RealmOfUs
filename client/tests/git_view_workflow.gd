@@ -99,6 +99,16 @@ func run_test() -> void:
 	viewer.set_process(false)
 	await process_frame
 	check(viewer.manifest.is_empty(), "No hardcoded world")
+	check(viewer.file_dialog.visible, "Standalone startup opens the world chooser")
+	viewer.file_dialog.hide()
+	check(options.has("selected"), "Default selection bundle supplied")
+	check(viewer.open_realm(options.selected), "Default selection bundle opens")
+	check(viewer.catalog.size() == 4, "Partial bundle retains the complete catalog")
+	viewer.import_one("bench")
+	check(viewer.rejected.get("bench") == "Asset missing", "Unselected model is missing")
+	var missing_chunk: String = Core.invoke("spatial.key", viewer.catalog.bench.owner_chunk).value
+	check(viewer.chunk_state(missing_chunk) == "Asset missing", "Unselected chunk is not empty")
+
 	check(viewer.open_realm(options.initial), "Initial fixed view opens")
 	var first: String = viewer.current_version
 	check(not first.is_empty(), "Fixed Git commit presented")

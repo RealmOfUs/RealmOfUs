@@ -30,24 +30,6 @@ impl Repository {
             "lfs_legend": legend,
         }))
     }
-    /// Return a concise Git/selection summary without domain validation.
-    pub fn status_text(&self) -> Result<String> {
-        let output = self.run(["status", "--short", "--branch"])?;
-        let selection = self.selection()?;
-        Ok(format!(
-            "{}Selection: {}\nDomain validation: not run\n",
-            String::from_utf8_lossy(&output),
-            if selection.all {
-                "all current entities".into()
-            } else {
-                format!(
-                    "{} chunk selectors, {} explicit entities",
-                    selection.chunks.len(),
-                    selection.entities.len()
-                )
-            }
-        ))
-    }
     /// Validate the actual staged tree, commit it with Git, then validate the created commit.
     /// Detect concurrent HEAD/index changes; a post-commit failure retains the commit for inspection.
     pub fn commit(&self, message: &str, author: Option<&str>) -> Result<Value> {
@@ -68,7 +50,7 @@ impl Repository {
         if let Some(author) = author {
             args.extend(["--author", author]);
         }
-        let output = self.run(args)?;
+        let output = self.run_visible(args)?;
         let after = self.head()?.context("Git commit returned without HEAD")?;
         let validated = self.validate(Mode::Commit(after.clone()), true).with_context(|| {
             format!("Git created commit {after}, but its Realm validation failed; the commit exists and was not rolled back")
@@ -156,7 +138,7 @@ impl Repository {
             );
             vec!["switch", "--", reference]
         };
-        let output = self.run(args)?;
+        let output = self.run_visible(args)?;
         ensure!(
             "snapshot_changed",
             self.head()?.as_deref() == Some(&target),
@@ -178,7 +160,7 @@ impl Repository {
     /// Support native merge abort and refresh selection after successful fast-forward/abort.
     pub fn merge(&self, reference: Option<&str>, ff_only: bool, abort: bool) -> Result<Value> {
         if abort {
-            let output = self.run(["merge", "--abort"])?;
+            let output = self.run_visible(["merge", "--abort"])?;
             let backups = self.refresh_selection()?;
             return Ok(json!({"git_output":String::from_utf8_lossy(&output),"backups":backups}));
         }
@@ -199,11 +181,11 @@ impl Repository {
             .status
             .success();
         let output = if forward || merged || ff_only {
-            let output = self.run(["merge", "--ff-only", &target])?;
+            let output = self.run_visible(["merge", "--ff-only", &target])?;
             self.refresh_selection()?;
             output
         } else {
-            self.run(["merge", "--no-commit", "--no-ff", &target])?
+            self.run_visible(["merge", "--no-commit", "--no-ff", &target])?
         };
         Ok(json!({"git_output":String::from_utf8_lossy(&output),"head":self.head()?}))
     }
@@ -231,7 +213,7 @@ impl Repository {
             }
         };
         self.run(["check-ref-format", &format!("refs/heads/{branch}")])?;
-        self.run(["fetch", &remote, &branch])?;
+        self.run_visible(["fetch", &remote, &branch])?;
         let target = self.resolve("FETCH_HEAD")?;
         self.merge(Some(&target), true, false)
     }
@@ -266,7 +248,7 @@ impl Repository {
             &remote,
             &target,
         ];
-        if let Err(error) = self.run(upload) {
+        if let Err(error) = self.run_visible(upload) {
             let message = error.to_string().to_lowercase();
             ensure!(
                 "missing_payload",
@@ -276,9 +258,9 @@ impl Repository {
                 "cannot publish required LFS history: {error}"
             );
             self.run(["lfs", "fetch", "--all", &self.default_remote()?, &target])?;
-            self.run(upload)?;
+            self.run_visible(upload)?;
         }
-        let output = self.run([
+        let output = self.run_visible([
             "-c",
             "lfs.allowincompletepush=false",
             "push",

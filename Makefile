@@ -32,7 +32,6 @@ CLI       := build/bin/rou
 GODOT_LIB := client/app/bin/$(LIB_PREFIX)rou_godot.$(LIB_EXT)
 FFI_LIB   := $(TARGET)/$(LIB_PREFIX)rou.$(LIB_EXT)
 ADDON     := dist/rou_blender.zip
-REALM     ?= build/s1-2.1/preview/realm.json
 
 export ROU_TOOLCHAIN_ROOT := $(ROOT)
 
@@ -59,9 +58,9 @@ ffi: ## Build the C library librou and rou/include/rou.h
 addon: ffi ## Package the Blender extension into dist/rou_blender.zip
 	$(PYTHON) toolchain/build/package_addon.py --output $(ADDON)
 
-viewer: godot-ext ffi ## Package the standalone viewer for REALM=<bundle>/realm.json
+viewer: godot-ext ## Export the standalone viewer application (opens any browse bundle)
 	$(PYTHON) toolchain/build/fetch_templates.py
-	$(PYTHON) toolchain/build/package_viewer.py --platform $(PLATFORM) --realm "$(abspath $(REALM))" --output-dir dist/viewer
+	$(PYTHON) toolchain/build/package_viewer.py --platform $(PLATFORM) --output-dir dist/viewer
 
 examples: ffi ## Generate the calibration street and the Villa Anahid scene under build/
 	$(BLENDER) --background --factory-startup --python-exit-code 1 --python examples/calibration/create_scene.py

@@ -63,14 +63,17 @@ A normal install, or loading after removing the quarantine attribute by hand, pa
 
 ## Standalone viewer
 
-Run `rou view` to produce a fixed-revision directory, then package it with the native extension for the current platform:
+The viewer app is an independent platform release: download a precompiled application and open any browse bundle. It embeds no world and opens a world chooser without `--realm`. Developers can export the application with its native extension for the current platform:
 
 ```bash
-make viewer REALM=/path/to/view/realm.json          # fetches export templates, writes dist/viewer/
+make viewer                                      # fetches export templates, writes dist/viewer/
 python3 toolchain/build/verify_git_viewer.py \
   --app "dist/viewer/macos/Realm of Us.app" \
+  --realm /path/to/bundle/realm.json \
   --output build/viewer-acceptance --seconds 12 --activate --at=12,3,5
 ```
+
+`rou view` supplies a complete catalog with only locally available models in the saved sparse selection. Use `--all` to fetch all models or `--chunk`/`--entity` to fetch an explicit subset; missing models remain marked as missing.
 
 `--at` picks a metre position in the actual world. The app has no Git, LFS or Blender runtime dependency and contains no source projects. Mac packaging extracts the arm64 binary from the official universal template, leaves the template untouched and ad-hoc signs the app. Only macOS arm64 is accepted; exporting for another platform needs that platform's native library and template, and an export succeeding is not a real-hardware pass.
 

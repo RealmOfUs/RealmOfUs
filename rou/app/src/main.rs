@@ -1,5 +1,5 @@
 //! rou keeps native Git path and revision habits; it discovers the realm from cwd.
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, CommandFactory, Parser, Subcommand};
 use rou_core::selection::Selection;
 use rou_git::{
     Context, Repository, Result, build::BuildOptions, ensure, lock::WriteLock, snapshot::Mode,
@@ -11,6 +11,7 @@ use std::{
 };
 
 mod help;
+mod report;
 
 #[derive(Parser)]
 #[command(
@@ -18,10 +19,13 @@ mod help;
     version,
     about = "Distributed Realm authoring with native Git and Git LFS",
     long_about = help::OVERVIEW,
-    after_help = "Built-in commands: rou <command> --help or rou help <command> for details and examples.\nNative Git commands: add, rm, mv, restore, log, branch, reflog, remote, config, fetch, lfs, tag, stash, show, reset.",
+    after_help = "Any other command is forwarded to Git unchanged; run \"git help <command>\".",
     after_long_help = help::TOPICS
 )]
 struct Cli {
+    /// Print the machine-readable JSON report for built-in commands.
+    #[arg(long, global = true)]
+    json: bool,
     #[command(subcommand)]
     command: Command,
 }
@@ -67,7 +71,7 @@ enum Sparse {
     /// Extend the local selection and obtain its LFS dependencies.
     #[command(long_about = help::SPARSE_ADD, after_long_help = help::SPARSE_ADD_EXAMPLES)]
     Add(Select),
-    /// Print saved selectors as JSON without changing files.
+    /// Print saved selectors without changing files.
     #[command(long_about = help::SPARSE_LIST, after_long_help = "Example:\n  rou sparse list")]
     List,
 }
@@ -121,12 +125,8 @@ enum Command {
     },
     /// Show Git status and local selection without running validation.
     #[command(long_about = help::STATUS, after_long_help = help::STATUS_EXAMPLES)]
-    Status {
-        /// Emit JSON with Git status, selection and LFS presence information.
-        #[arg(long)]
-        json: bool,
-    },
-    /// Show native Git differences or a --realm JSON change summary.
+    Status,
+    /// Show native Git differences or a --realm change summary.
     #[command(long_about = help::DIFF, after_long_help = help::DIFF_EXAMPLES)]
     Diff(Raw),
     /// Build frozen inputs and write per-model GLB/records to runtime/.
@@ -209,9 +209,8 @@ enum Command {
             long_help = "Destination directory, relative to the calling directory. Defaults to <realm-root>/.rou/view/<commit-oid>, or .rou/view/worktree with --worktree. An existing bundle or empty directory may be replaced. Ancestor directory symlinks such as /tmp are allowed and resolved before writing; the reported catalog path uses that resolved parent. Bundle-root and internal symlinks, unrelated files and the authoring root are rejected."
         )]
         output: Option<PathBuf>,
-        /// Include assets intersecting these chunks; keep the complete catalog.
-        #[arg(long, value_name = "SELECTOR", allow_hyphen_values = true, long_help = help::CHUNK)]
-        chunk: Vec<String>,
+        #[command(flatten)]
+        select: Select,
         /// Export an already-built working draft; conflicts with REVISION.
         #[arg(long, conflicts_with = "revision")]
         worktree: bool,
@@ -226,10 +225,11 @@ enum Output {
     Exit(i32),
 }
 
-fn run(command: Command) -> Result<Output> {
+fn run(command: Command, mut machine: bool) -> Result<Output> {
+    let kind = report::kind(&command);
     if let Command::Init { directory } = command {
         let repo = Repository::init(&directory)?;
-        return Ok(Output::Json(repo.status_json()?));
+        return finish(&repo, Output::Json(repo.status_json()?), kind, machine);
     }
     if let Command::Clone {
         source,
@@ -253,11 +253,11 @@ fn run(command: Command) -> Result<Output> {
             lock.install_signal_cleanup()?;
             repo.sparse("set", selection)?;
         }
-        return Ok(Output::Json(repo.status_json()?));
+        return finish(&repo, Output::Json(repo.status_json()?), kind, machine);
     }
     let repo = Repository::discover(Path::new("."))?;
     let mutating = match &command {
-        Command::Status { .. }
+        Command::Status
         | Command::Validate { .. }
         | Command::View { .. }
         | Command::Diff(_)
@@ -286,21 +286,17 @@ fn run(command: Command) -> Result<Output> {
         None
     };
     let result = match command {
-        Command::Status { json: machine } => {
+        Command::Status => {
             if machine {
                 Output::Json(repo.status_json()?)
             } else {
-                Output::Text(repo.status_text()?)
+                Output::Text(report::status(&repo)?)
             }
         }
         Command::Sparse { action } => match action {
             Sparse::List => Output::Json(serde_json::to_value(repo.selection()?)?),
-            Sparse::Set(select) => {
-                Output::Json(serde_json::to_value(repo.sparse("set", select.value())?)?)
-            }
-            Sparse::Add(select) => {
-                Output::Json(serde_json::to_value(repo.sparse("add", select.value())?)?)
-            }
+            Sparse::Set(select) => sparse_output(repo.sparse("set", select.value())?, machine)?,
+            Sparse::Add(select) => sparse_output(repo.sparse("add", select.value())?, machine)?,
         },
         Command::Switch {
             branch,
@@ -318,7 +314,7 @@ fn run(command: Command) -> Result<Output> {
             select,
         } => {
             if branch.is_none() && revision.is_none() && select.chosen().is_some() {
-                Output::Json(serde_json::to_value(repo.sparse("set", select.value())?)?)
+                sparse_output(repo.sparse("set", select.value())?, machine)?
             } else {
                 Output::Json(repo.switch(
                     revision.as_deref().unwrap_or("HEAD"),
@@ -364,7 +360,7 @@ fn run(command: Command) -> Result<Output> {
         Command::View {
             revision,
             output,
-            chunk,
+            select,
             worktree,
         } => {
             let mode = if worktree {
@@ -372,11 +368,12 @@ fn run(command: Command) -> Result<Output> {
             } else {
                 Mode::Commit(repo.resolve(revision.as_deref().unwrap_or("HEAD"))?)
             };
-            Output::Json(serde_json::to_value(repo.view(
-                mode,
-                output.as_deref(),
-                &chunk,
-            )?)?)
+            let report = repo.view(mode, output.as_deref(), select.chosen().as_ref())?;
+            if machine {
+                Output::Json(serde_json::to_value(report)?)
+            } else {
+                Output::Text(report::view(&report))
+            }
         }
         Command::Diff(raw) => {
             let mut realm = false;
@@ -386,7 +383,9 @@ fn run(command: Command) -> Result<Output> {
                 if arg == "--" {
                     paths = true;
                 }
-                if arg == "--realm" && !paths {
+                if arg == "--json" && !paths {
+                    machine = true;
+                } else if arg == "--realm" && !paths {
                     realm = true;
                 } else {
                     args.push(arg);
@@ -406,31 +405,88 @@ fn run(command: Command) -> Result<Output> {
                 .context("missing Git command")?;
             ensure!(
                 "invalid_argument",
-                [
-                    "add", "rm", "mv", "restore", "log", "branch", "reflog", "remote", "config",
-                    "fetch", "lfs", "tag", "stash", "show", "reset"
+                ![
+                    "checkout",
+                    "switch",
+                    "commit",
+                    "merge",
+                    "pull",
+                    "push",
+                    "diff",
+                    "status",
+                    "sparse-checkout",
+                    "init",
+                    "clone"
                 ]
                 .contains(&name),
-                "unknown command {name}; run rou --help"
+                "{name} is reserved; run rou {name} --help"
             );
-            if ["add", "rm", "mv", "restore"].contains(&name) {
-                ensure!(
-                    "invalid_argument",
-                    args.len() > 1,
-                    "{name} requires paths or explicit Git options"
-                );
-            }
             Output::Exit(repo.from_caller(&args)?)
         }
         Command::Init { .. } | Command::Clone { .. } => {
             unreachable!("handled before repository discovery")
         }
     };
-    Ok(result)
+    finish(&repo, result, kind, machine)
+}
+
+fn sparse_output(report: rou_git::sparse::SparseReport, machine: bool) -> Result<Output> {
+    let value = serde_json::to_value(&report)?;
+    if machine {
+        Ok(Output::Json(value))
+    } else {
+        Ok(Output::Text(report::sparse(
+            &value,
+            report.materialized,
+            report.already_present,
+        )))
+    }
+}
+
+fn finish(repo: &Repository, output: Output, kind: &str, machine: bool) -> Result<Output> {
+    if machine {
+        return Ok(output);
+    }
+    use std::io::Write;
+    for native in repo.take_output() {
+        std::io::stdout().write_all(&native.stdout)?;
+        std::io::stdout().flush()?;
+        std::io::stderr().write_all(&native.stderr)?;
+    }
+    let kind = if kind == "merge"
+        && !repo
+            .status(["rev-parse", "--verify", "--quiet", "MERGE_HEAD"])?
+            .status
+            .success()
+    {
+        "integrated"
+    } else {
+        kind
+    };
+    Ok(match output {
+        Output::Json(value) => Output::Text(report::render(kind, &value)),
+        other => other,
+    })
 }
 
 fn main() {
-    let result = run(Cli::parse().command);
+    let args: Vec<OsString> = std::env::args_os().collect();
+    let native_help = args.get(1).is_some_and(|arg| arg == "help")
+        && args
+            .get(2)
+            .and_then(|arg| arg.to_str())
+            .is_some_and(|name| {
+                !name.starts_with('-') && Cli::command().find_subcommand(name).is_none()
+            });
+    let cli = if native_help {
+        Cli {
+            json: false,
+            command: Command::Native(args[1..].to_vec()),
+        }
+    } else {
+        Cli::parse()
+    };
+    let result = run(cli.command, cli.json);
     match result {
         Ok(Output::Json(value)) => {
             println!(

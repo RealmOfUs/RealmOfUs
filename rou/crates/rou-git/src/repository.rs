@@ -2,6 +2,7 @@
 use crate::{Context, Result, ensure};
 use bstr::{BString, ByteSlice};
 use std::{
+    cell::RefCell,
     ffi::{OsStr, OsString},
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
@@ -111,6 +112,7 @@ pub struct Repository {
     pub caller: PathBuf,
     /// Absolute Git directory, including linked-worktree layouts.
     pub git_dir: PathBuf,
+    pub(crate) output: RefCell<Vec<Output>>,
 }
 impl Repository {
     /// Discover the worktree root and actual Git directory from a canonical caller directory.
@@ -122,6 +124,7 @@ impl Repository {
         Ok(Self {
             root,
             caller,
+            output: RefCell::default(),
             git_dir: os_path(git_dir.strip_suffix(b"\n").unwrap_or(&git_dir))?,
         })
     }
@@ -132,6 +135,22 @@ impl Repository {
         S: AsRef<OsStr>,
     {
         checked(execute(&self.root, args, None)?)
+    }
+    /// Run an operation and retain its successful stdout/stderr for host presentation.
+    /// The returned bytes remain stdout only, preserving machine report fields.
+    pub fn run_visible<I, S>(&self, args: I) -> Result<Vec<u8>>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        let output = execute(&self.root, args, None)?;
+        let stdout = checked(output.clone())?;
+        self.output.borrow_mut().push(output);
+        Ok(stdout)
+    }
+    /// Drain successful operation output, preserving each native stream as bytes.
+    pub fn take_output(&self) -> Vec<Output> {
+        self.output.take()
     }
     /// Run checked Git at the repository root with byte-oriented stdin.
     pub fn input<I, S>(&self, args: I, input: &[u8]) -> Result<Vec<u8>>

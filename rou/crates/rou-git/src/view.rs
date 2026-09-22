@@ -1,12 +1,14 @@
 //! Produce a self-contained browse bundle from a validated snapshot.
 use crate::{
     Context, Result, ensure, io,
+    payload::MissingPayload,
     repository::{Repository, text},
     snapshot::Mode,
 };
 use rou_core::{
     documents::{Manifest, Version},
-    formats, glb, json, limits, paths, spatial,
+    formats, glb, json, limits, paths,
+    selection::Selection,
 };
 use serde::Serialize;
 use std::{
@@ -28,13 +30,26 @@ pub struct ViewReport {
     pub downloaded_entities: Vec<String>,
     /// Version sidecar binding the generated catalog bytes to this snapshot.
     pub version: Version,
+    /// Number of distinct models referenced by the catalog.
+    #[serde(skip)]
+    pub model_count: usize,
+    /// Number of distinct models whose payloads are present in the bundle.
+    #[serde(skip)]
+    pub included_models: usize,
 }
 
 impl Repository {
     /// Generate a complete catalog with selected GLBs and a byte-bound version sidecar.
     /// Use a sibling temporary directory and preserve an existing bundle on replacement failure.
-    /// Does not change authoring files or the index; `chunks` restricts payloads, not metadata.
-    pub fn view(&self, mode: Mode, output: Option<&Path>, chunks: &[String]) -> Result<ViewReport> {
+    /// Does not change authoring files or the index. Explicit selectors may fetch runtime payloads;
+    /// absent selectors use the saved selection and only locally available bytes, never the network.
+    /// Verified worktree GLBs are hard-linked when possible; other payloads are copied.
+    pub fn view(
+        &self,
+        mode: Mode,
+        output: Option<&Path>,
+        selection: Option<&Selection>,
+    ) -> Result<ViewReport> {
         let validated = self.validate(mode, false)?;
         let commit = validated.snapshot.mode.commit().unwrap_or("");
         let output = match output {
@@ -70,34 +85,79 @@ impl Repository {
             .prefix(".rou-view-")
             .tempdir_in(parent)?;
         let manifest = validated.view.manifest()?;
-        let mut selected: BTreeSet<String> = if chunks.is_empty() {
-            validated.world.entities.keys().cloned().collect()
-        } else {
-            BTreeSet::new()
+        let fetch = selection.is_some();
+        let selection = match selection {
+            Some(selection) => selection.clone(),
+            None => self.selection()?,
         };
-        if !chunks.is_empty() {
-            for chunk in validated.world.realm.profile.range(chunks)? {
-                if let Some(ids) = validated.view.chunks.get(&spatial::chunk_key(chunk)) {
-                    selected.extend(ids.iter().cloned());
-                }
-            }
-        }
+        let selected: BTreeSet<_> = selection
+            .resolve(&validated.world, &validated.view)?
+            .entity_ids
+            .into_iter()
+            .collect();
         fs::create_dir(temporary.path().join("objects"))?;
         let mut provided = BTreeSet::new();
         for entity in &validated.view.entities {
-            if selected.contains(&entity.id) && provided.insert(&entity.asset.sha256) {
-                let bytes = validated.snapshot.payload(
-                    &entity.asset.path,
-                    &entity.asset.descriptor(),
-                    true,
-                )?;
+            if !selected.contains(&entity.id) {
+                continue;
+            }
+            if !provided.contains(&entity.asset.sha256) {
+                let descriptor = entity.asset.descriptor();
+                let working = validated.snapshot.working_path(&entity.asset.path)?;
+                let local = working.is_file()
+                    && working.metadata()?.len() == descriptor.bytes
+                    && validated.snapshot.hash_working_file(&working)? == descriptor;
+                let source = if local {
+                    working
+                } else {
+                    match validated
+                        .snapshot
+                        .payload_path(&entity.asset.path, &descriptor, fetch)
+                    {
+                        Ok(path) => path,
+                        Err(error)
+                            if !fetch && error.downcast_ref::<MissingPayload>().is_some() =>
+                        {
+                            continue;
+                        }
+                        Err(error) => return Err(error),
+                    }
+                };
+                let destination = temporary.path().join(paths::object(&entity.asset.sha256));
+                if !local || fs::hard_link(&source, &destination).is_err() {
+                    fs::copy(&source, &destination)?;
+                }
+                // Verify the published inode or copy, not only the earlier source snapshot.
+                let bytes = io::read(&destination, limits::GLB_BYTES)?;
+                descriptor.verify(&bytes)?;
                 glb::precheck(&bytes)?;
-                io::atomic_write(
-                    &temporary.path().join(paths::object(&entity.asset.sha256)),
-                    &bytes,
-                )?;
+                provided.insert(entity.asset.sha256.clone());
             }
         }
+        let included: BTreeSet<_> = validated
+            .view
+            .entities
+            .iter()
+            .filter(|entity| {
+                selected.contains(&entity.id) && provided.contains(&entity.asset.sha256)
+            })
+            .map(|entity| entity.id.clone())
+            .collect();
+        let model_count = validated
+            .world
+            .entities
+            .values()
+            .map(|entity| &entity.model)
+            .collect::<BTreeSet<_>>()
+            .len();
+        let included_models = validated
+            .view
+            .entities
+            .iter()
+            .filter(|entity| provided.contains(&entity.asset.sha256))
+            .map(|entity| &validated.world.entities[&entity.id].model)
+            .collect::<BTreeSet<_>>()
+            .len();
         let catalog = json::pretty(&manifest)?;
         let version = Version {
             format: formats::GIT_VIEW.into(),
@@ -135,8 +195,10 @@ impl Repository {
             ok: true,
             manifest: output.join(paths::REALM),
             entity_count: manifest.entities.len(),
-            downloaded_entities: selected.into_iter().collect(),
+            downloaded_entities: included.into_iter().collect(),
             version,
+            model_count,
+            included_models,
         })
     }
 }

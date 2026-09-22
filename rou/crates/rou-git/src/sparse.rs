@@ -23,6 +23,12 @@ pub struct SparseReport {
     pub resolution: Resolved,
     /// Absolute paths of ignored files moved to `.rou/backups/` before cone removal.
     pub backups: Vec<String>,
+    /// Number of selected payload files materialized during this operation.
+    #[serde(skip)]
+    pub materialized: usize,
+    /// Number of selected payload files already present in the worktree.
+    #[serde(skip)]
+    pub already_present: usize,
 }
 
 impl Repository {
@@ -77,7 +83,7 @@ impl Repository {
             "resolve merge conflicts before changing sparse selection"
         );
         let resolution = self.resolve_selection(&head, &selection)?;
-        let backups = self.prepare_selection(&head, &selection, &resolution)?;
+        let report = self.prepare_selection(&head, &selection, &resolution)?;
         ensure!(
             "snapshot_changed",
             self.head()?.as_deref() == Some(&head),
@@ -88,19 +94,16 @@ impl Repository {
             &io::local(&self.root, "readiness.json")?,
             &serde_json::json!({"commit":head,"resolution":resolution}),
         )?;
-        Ok(SparseReport {
-            resolution,
-            backups,
-        })
+        Ok(report)
     }
     /// Apply a resolved selection to the worktree and hydrate its exact payload set.
-    /// Return paths of ignored files backed up before a cone shrink.
+    /// Return the resolution, backed-up ignored files and hydration counts.
     pub fn prepare_selection(
         &self,
         revision: &str,
         selection: &Selection,
         resolution: &Resolved,
-    ) -> Result<Vec<String>> {
+    ) -> Result<SparseReport> {
         self.apply_selection(revision, selection, resolution, false)
     }
     pub(crate) fn apply_selection(
@@ -109,7 +112,7 @@ impl Repository {
         selection: &Selection,
         resolution: &Resolved,
         protected: bool,
-    ) -> Result<Vec<String>> {
+    ) -> Result<SparseReport> {
         let backups = if selection.all {
             self.run(["sparse-checkout", "disable"])?;
             Vec::new()
@@ -126,7 +129,7 @@ impl Repository {
             )?;
             backups
         };
-        self.hydrate(
+        let materialized = self.hydrate(
             revision,
             &resolution
                 .paths
@@ -135,7 +138,12 @@ impl Repository {
                 .cloned()
                 .collect::<Vec<_>>(),
         )?;
-        Ok(backups)
+        Ok(SparseReport {
+            resolution: resolution.clone(),
+            backups,
+            materialized,
+            already_present: resolution.paths.len() + resolution.assets.len() - materialized,
+        })
     }
     /// Re-resolve saved selectors at current HEAD and persist readiness; return any backup paths.
     pub fn refresh_selection(&self) -> Result<Vec<String>> {
@@ -144,12 +152,12 @@ impl Repository {
         };
         let selection = self.selection()?;
         let resolution = self.resolve_selection(&head, &selection)?;
-        let backups = self.prepare_selection(&head, &selection, &resolution)?;
+        let report = self.prepare_selection(&head, &selection, &resolution)?;
         io::write_json(
             &io::local(&self.root, "readiness.json")?,
             &serde_json::json!({"commit":head,"resolution":resolution}),
         )?;
-        Ok(backups)
+        Ok(report.backups)
     }
     /// Reject dirty files and back up ignored files only in tracked directories leaving the cone.
     /// Unrelated out-of-cone directories are not moved or rejected.
@@ -236,8 +244,8 @@ impl Repository {
         Ok(backups)
     }
     /// Materialize selected LFS pointers after checking target identity and local changes.
-    /// Refresh only matching index stat entries under Git's native index lock.
-    pub fn hydrate(&self, revision: &str, paths: &[String]) -> Result<()> {
+    /// Refresh only matching index stat entries under Git's native index lock; return the materialized count.
+    pub fn hydrate(&self, revision: &str, paths: &[String]) -> Result<usize> {
         let snapshot = Snapshot::new(self, Mode::Commit(revision.into()))?;
         let mut hydrated = Vec::new();
         let modified: BTreeSet<BString> = self
@@ -292,7 +300,8 @@ impl Repository {
             hydrated.push(path.clone());
         }
         self.refresh_hydrated(&snapshot, &hydrated)?;
-        snapshot.flush()
+        snapshot.flush()?;
+        Ok(hydrated.len())
     }
 
     fn refresh_hydrated(&self, target: &Snapshot, paths: &[String]) -> Result<()> {

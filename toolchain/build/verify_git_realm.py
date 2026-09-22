@@ -73,7 +73,7 @@ class Acceptance:
         return result.stdout
 
     def rou(self, cwd: Path, *args: str, expected: int | None = 0):
-        text = self.run([str(self.binary), *args], cwd, expected)
+        text = self.run([str(self.binary), "--json", *args], cwd, expected)
         try:
             return json.loads(text) if text.strip() else None
         except json.JSONDecodeError:
@@ -171,8 +171,42 @@ class Acceptance:
             "branch creation does not hydrate",
             not self.payloads(alice) and (not self.payloads(bob)),
         )
+        empty_view = self.directory / "empty-view"
+        self.rou(alice, "view", "--output", str(empty_view))
+        self.check(
+            "empty selection exports metadata without downloads",
+            not self.payloads(alice) and not list((empty_view / "objects").iterdir()),
+        )
         self.rou(alice, "sparse", "set", "--chunk", "0,0,0")
         self.rou(bob, "sparse-checkout", "set", "--entity", "bench")
+        selected_view = self.directory / "selected-view"
+        before = set(self.payloads(alice))
+        selected = self.rou(alice, "view", "HEAD", "--output", str(selected_view))
+        self.check(
+            "default view includes only house and plaque without downloads",
+            selected["downloaded_entities"] == ["house", "plaque"]
+            and len(list((selected_view / "objects").iterdir())) == 2
+            and set(self.payloads(alice)) == before,
+        )
+        catalog = json.loads((selected_view / "realm.json").read_text())
+        self.check("selected bundle keeps all four entities", len(catalog["entities"]) == 4)
+        self.check(
+            "materialized runtime assets are hard-linked",
+            all(
+                (selected_view / entity["asset"]["path"]).samefile(
+                    alice / "runtime" / (entity["id"] + ".glb")
+                )
+                for entity in catalog["entities"]
+                if entity["id"] in {"house", "plaque"}
+            ),
+        )
+        chunk_view = self.directory / "chunk-view"
+        chunk = self.rou(alice, "view", "--chunk", "1,0,0", "--output", str(chunk_view))
+        self.check(
+            "explicit chunk exports bench without fetching sources",
+            chunk["downloaded_entities"] == ["bench"] and not (alice / "sources/props").exists(),
+        )
+
         self.check(
             "selection hydrates source and shared dependencies",
             all(
@@ -243,8 +277,11 @@ class Acceptance:
             self.directory / "initial-view",
             self.directory / "merged-view",
         )
-        self.rou(official, "view", first, "--output", str(initial_view))
-        prepared = self.rou(alice, "view", "HEAD", "--output", str(merged_view))
+        self.rou(official, "view", first, "--all", "--output", str(initial_view))
+        prepared = self.rou(alice, "view", "HEAD", "--all", "--output", str(merged_view))
+        self.check(
+            "explicit all includes four models", len(list((merged_view / "objects").iterdir())) == 4
+        )
         self.check(
             "view resolves symbolic revision to immutable OID",
             prepared["version"]["commit_oid"] == merged,
@@ -280,6 +317,7 @@ class Acceptance:
                     "../tests/git_view_workflow.gd",
                     "--",
                     "--initial=" + str(initial_view),
+                    "--selected=" + str(selected_view),
                     "--updated=" + str(merged_view),
                     "--report=" + str(self.directory / "godot-report.json"),
                 ]

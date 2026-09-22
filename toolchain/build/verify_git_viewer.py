@@ -11,22 +11,31 @@ from pathlib import Path
 
 
 def verify(
-    app: Path, output: Path, seconds: int, activate: bool = False, at: str | None = None
+    app: Path,
+    realm: Path,
+    output: Path,
+    seconds: int,
+    activate: bool = False,
+    at: str | None = None,
 ) -> dict:
     app = app.resolve()
     output = output.resolve()
     output.mkdir(parents=True, exist_ok=False)
-    resources = app / "Contents/Resources"
-    version = json.loads((resources / "preview/version.json").read_text())
+    realm = realm.resolve()
+    if realm.is_dir():
+        realm = realm / "realm.json"
+    version = json.loads(realm.with_name("version.json").read_text())
     if not version.get("commit_oid"):
-        raise ValueError("The acceptance app must contain a fixed Git version")
+        raise ValueError("The acceptance bundle must contain a fixed Git version")
     with (app / "Contents/Info.plist").open("rb") as stream:
         info = plistlib.load(stream)
     binary = app / "Contents/MacOS" / info["CFBundleExecutable"]
     source_files = list(app.rglob("*.blend"))
     git_directories = [path for path in app.rglob(".git")]
-    if source_files or git_directories:
-        raise ValueError("The standalone viewer must not contain authoring projects or Git data")
+    if source_files or git_directories or (app / "Contents/Resources/preview").exists():
+        raise ValueError(
+            "The standalone viewer must not contain authoring projects, Git data or an embedded world"
+        )
     report_path = output / "runtime-report.json"
     screenshot = output / "viewer.png"
     command = [
@@ -34,6 +43,8 @@ def verify(
         "--",
         f"--benchmark={seconds}",
         "--static",
+        "--no-recent",
+        f"--realm={realm}",
         "--capture-after=4",
         f"--report={report_path}",
         f"--screenshot={screenshot}",
@@ -112,6 +123,9 @@ def verify(
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--app", type=Path, required=True)
+    parser.add_argument(
+        "--realm", type=Path, required=True, help="An external fixed-version browse bundle"
+    )
     parser.add_argument("--output", type=Path, required=True, help="A new acceptance directory")
     parser.add_argument("--seconds", type=int, default=12)
     parser.add_argument(
@@ -121,7 +135,12 @@ def main():
     args = parser.parse_args()
     if not 5 <= args.seconds <= 60:
         parser.error("Choose a 5\u201360 second rendering sample")
-    print(json.dumps(verify(args.app, args.output, args.seconds, args.activate, args.at), indent=2))
+    print(
+        json.dumps(
+            verify(args.app, args.realm, args.output, args.seconds, args.activate, args.at),
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":

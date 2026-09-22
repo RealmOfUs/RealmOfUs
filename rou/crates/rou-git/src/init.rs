@@ -14,20 +14,21 @@ impl Repository {
     pub fn init(directory: &Path) -> Result<Self> {
         io::reject_symlinks(directory)?;
         fs::create_dir_all(directory)?;
-        if !directory.join(".git").exists() {
-            repository::checked(repository::execute(
-                directory,
-                ["init", "-b", "main"],
-                None,
-            )?)?;
-        }
+        let output = if !directory.join(".git").exists() {
+            let output = repository::execute(directory, ["init", "-b", "main"], None)?;
+            repository::checked(output.clone())?;
+            Some(output)
+        } else {
+            None
+        };
         let repo = Self::discover(directory)?;
+        repo.output.borrow_mut().extend(output);
         ensure!(
             "invalid_repository",
             repo.root == directory.canonicalize()?,
             "init must target the Git root"
         );
-        repo.run(["lfs", "install", "--local", "--skip-smudge"])?;
+        repo.run_visible(["lfs", "install", "--local", "--skip-smudge"])?;
         append_template(
             &io::destination(&repo.root, b".gitignore")?,
             "/.rou/\n/.godot/\n*.blend1\n*.blend2\n",
@@ -78,7 +79,7 @@ impl Repository {
             "clone requires a source URL"
         );
         let current = std::env::current_dir()?;
-        repository::checked(repository::execute(
+        let output = repository::execute(
             &current,
             [
                 std::ffi::OsStr::new("clone"),
@@ -88,9 +89,11 @@ impl Repository {
                 destination.as_os_str(),
             ],
             None,
-        )?)?;
+        )?;
+        repository::checked(output.clone())?;
         let repo = Self::discover(destination)?;
-        repo.run(["lfs", "install", "--local", "--skip-smudge"])?;
+        repo.output.borrow_mut().push(output);
+        repo.run_visible(["lfs", "install", "--local", "--skip-smudge"])?;
         repo.run([
             "sparse-checkout",
             "set",
@@ -100,7 +103,7 @@ impl Repository {
             "runtime",
             "docs",
         ])?;
-        repo.run(["checkout"])?;
+        repo.run_visible(["checkout"])?;
         io::write_json(
             &io::local(&repo.root, "selection.json")?,
             &Selection::default(),

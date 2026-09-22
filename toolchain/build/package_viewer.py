@@ -1,11 +1,8 @@
-"""Export real Godot templates; keep the runtime GLB closure outside the PCK."""
+"""Export a standalone Godot viewer that opens external browse bundles."""
 
 import argparse
-import importlib.util
 import json
-import os
 import platform as host_platform
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -45,15 +42,15 @@ def arm64_template(source: Path) -> Path:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--realm", type=Path, default=ROOT / "build/s1-2.1/preview/realm.json")
-    p.add_argument("--output-dir", type=Path, default=ROOT / "dist/viewer-2.1")
+    p.add_argument("--output-dir", type=Path, default=ROOT / "dist/viewer")
     p.add_argument("--name", default="Realm of Us", help="Application filename")
     p.add_argument("--platform", choices=["macos", "windows", "linux", "all"], default="macos")
     a = p.parse_args()
     project = ROOT / "client/app"
     if not a.name.strip() or any((char in a.name for char in '/\\\n\r"')) or a.name in {".", ".."}:
         p.error("Choose a simple application name")
-    a.realm = a.realm.resolve()
+    a.output_dir = a.output_dir.resolve()
+    a.output_dir.mkdir(parents=True, exist_ok=True)
     system = {"darwin": "macos", "win32": "windows"}.get(sys.platform, "linux")
     if a.platform not in [system]:
         p.error(
@@ -62,34 +59,8 @@ def main():
     suffix = {"macos": ".dylib", "windows": ".dll", "linux": ".so"}[system]
     prefix = "" if system == "windows" else "lib"
     extension = prefix + "rou_godot" + suffix
-    for artifact, target in (
-        (project / "bin" / extension, "godot-ext"),
-        (ROOT / "rou/target/release" / (prefix + "rou" + suffix), "ffi"),
-    ):
-        if not artifact.is_file():
-            p.error(f"missing {artifact.relative_to(ROOT)}; run `make {target}` first")
-    os.environ["ROU_LIB"] = str(ROOT / "rou/target/release" / (prefix + "rou" + suffix))
-    spec = importlib.util.spec_from_file_location(
-        "rou_package_core", ROOT / "toolchain/blender/rou_blender/core.py"
-    )
-    core = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(core)
-    manifest = core.read_json(a.realm, "manifest.validate")
-    verified = set()
-    for entity in manifest["entities"]:
-        asset = entity["asset"]
-        if asset["sha256"] not in verified:
-            data = core.read_bytes(a.realm.parent / asset["path"], core.LIMITS["glb_bytes"])
-            inspected = core.call("glb.inspect", data)
-            core.call("asset.match", {"asset": asset, "actual": inspected["descriptor"]})
-            verified.add(asset["sha256"])
-    version_path = a.realm.parent / "version.json"
-    if version_path.exists():
-        version = core.read_json(version_path)
-        core.call(
-            "version.validate",
-            {"version": version, "catalog": a.realm.read_bytes().decode("utf-8")},
-        )
+    if not (project / "bin" / extension).is_file():
+        p.error(f"missing {extension}; run `make godot-ext` first")
     templates = ROOT / ".cache/godot-templates"
     if not (templates / "macos.zip").exists():
         raise SystemExit("Run python3 toolchain/build/fetch_templates.py first")
@@ -140,7 +111,7 @@ def main():
             )
     presets = project / "export_presets.cfg"
     presets.write_text("\n".join(lines))
-    notices_path = a.realm.resolve().parent.parent / "THIRD-PARTY-NOTICES.txt"
+    notices_path = a.output_dir / "THIRD-PARTY-NOTICES.txt"
     subprocess.run(
         [
             "godot",
@@ -169,7 +140,10 @@ def main():
         destination = a.output_dir.resolve() / key
         destination.mkdir(parents=True, exist_ok=True)
         output = destination / name
-        log = a.realm.resolve().parent.parent / ("export-" + key + ".log")
+        with tempfile.NamedTemporaryFile(
+            prefix="rou-export-" + key + "-", suffix=".log", delete=False
+        ) as temporary:
+            log = Path(temporary.name)
         with log.open("w") as f:
             proc = subprocess.run(
                 [
@@ -187,18 +161,6 @@ def main():
             )
         if proc.returncode or not output.exists():
             raise SystemExit("Export failed: " + str(log))
-        data = output / "Contents/Resources/preview" if key == "macos" else destination / "preview"
-        if data.exists():
-            shutil.rmtree(data)
-        data.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(a.realm, data / "realm.json")
-        if version_path.exists():
-            shutil.copy2(version_path, data / "version.json")
-        for entity in manifest["entities"]:
-            src = a.realm.parent / entity["asset"]["path"]
-            dst = data / entity["asset"]["path"]
-            dst.parent.mkdir(exist_ok=True)
-            shutil.copy2(src, dst)
         notice_destination = output / "Contents/Resources" if key == "macos" else destination
         notices = (
             notices_path.read_text() + "\n\n" + (project / "assets/ATTRIBUTION.md").read_text()
@@ -222,9 +184,7 @@ def main():
                 "runtime_tested": False,
             }
         )
-    (a.realm.resolve().parent.parent / "package-report.json").write_text(
-        json.dumps(reports, indent=2) + "\n"
-    )
+    (a.output_dir / "package-report.json").write_text(json.dumps(reports, indent=2) + "\n")
     print(json.dumps(reports, indent=2))
 
 

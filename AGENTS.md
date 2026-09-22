@@ -2,8 +2,7 @@
 
 - Write code documentation, Rustdoc, docstrings and comments in English.
 - Prefer ASCII in source files, including identifiers and punctuation.
-- Use Unicode escapes when non-ASCII string values are needed for UI content,
-  asset names or Unicode test coverage. Preserve their runtime values and meaning.
+- Don't commit code to git unless instructed.
 
 # Documentation placement
 

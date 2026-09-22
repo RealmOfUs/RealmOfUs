@@ -80,19 +80,12 @@ func _ready() -> void:
 	last_tick = started_at
 	if DisplayServer.get_name() != "headless":
 		DisplayServer.window_move_to_foreground()
-	var path: String = options.get("realm", default_realm())
+	var path: String = options.get("realm", "")
 	if not path.is_empty():
 		open_realm(path, options.get("commit", ""))
 
-
-func default_realm() -> String:
-	if OS.has_feature("editor"):
-		return ""
-	var directory := OS.get_executable_path().get_base_dir()
-	var path := directory.path_join("preview/realm.json")
-	if OS.get_name() == "macOS":
-		path = directory.path_join("../Resources/preview/realm.json").simplify_path()
-	return path if FileAccess.file_exists(path) else ""
+	else:
+		choose_realm()
 
 
 func choose_realm() -> void:

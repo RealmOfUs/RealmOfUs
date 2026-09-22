@@ -38,13 +38,15 @@ rou init
 rou build
 rou add .
 rou commit -m "Create a realm"
-rou view HEAD --output .rou/view/current
+rou view HEAD --all --output .rou/view/current
 popd
 
 godot --path client/app -- --realm="$PWD/build/my-realm/.rou/view/current/realm.json"
 ```
 
-Git identity comes from your local configuration; tests use isolated identities. `init` stages nothing and `build` never runs `add`. Select regions with `rou sparse set --chunk '1,0,1..-1,0,-1'`, extend with `rou sparse add --entity house`, or take every authoring dependency with `rou sparse set --all`. Built-in commands print a short usage with `-h` and full rules and examples with `--help`, for example `rou sparse set --help`, `rou build --help`, `rou diff --help`; see [CLI help](rou/README.md#cli-help). The [tutorial](doc/tutorial.md) walks through a complete two-author flow.
+Git identity comes from your local configuration; tests use isolated identities. `init` stages nothing and `build` never runs `add`. Select regions with `rou sparse set --chunk '1,0,1..-1,0,-1'`, extend with `rou sparse add --entity house`, or take every authoring dependency with `rou sparse set --all`. Built-in commands print human-readable summaries; add `--json` before or after a built-in command for its machine report. Any other command is forwarded unchanged to Git. Built-in commands print a short usage with `-h` and full rules and examples with `--help`, for example `rou sparse set --help`, `rou build --help`, `rou diff --help`; see [CLI help](rou/README.md#cli-help). The [tutorial](doc/tutorial.md) walks through a complete two-author flow.
+
+The viewer is a separate platform application distributed as a precompiled release. Download it and open any browse bundle; a source checkout and Godot are only needed to build it yourself with `make viewer`. The app opens a world chooser when started without `--realm`. `rou view` defaults to the saved sparse selection without downloads; `--all` explicitly fetches every model. Models omitted from a bundle remain visible in its catalog as missing.
 
 The viewer starts above the centre of all entity bounds at a distance equal to their diagonal, or 2 m above the origin for an empty world. Pick a place from the map, the entity list or typed metre coordinates, or pass `--at=12,3,5`. The loading radius is 48 m.
 
@@ -56,7 +58,7 @@ make test           # Rust tests, spatial cases, two-author Git/LFS flow with Bl
 make test-addon     # Blender extension: preview, authoring session, real install
 ```
 
-`make test-git` creates a real Blender scene and an isolated bare Git/LFS remote in a fresh build directory and checks two-author collaboration, selection, reopening original projects, parallel edits, merge and fixed-revision viewing. Packaging (`make addon`, `make viewer REALM=...`) and the standalone-app acceptance run are described in the [toolchain guide](toolchain/README.md). Current results and known limits are in [status.md](doc/status.md).
+`make test-git` creates a real Blender scene and an isolated bare Git/LFS remote in a fresh build directory and checks two-author collaboration, selection, reopening original projects, parallel edits, merge and fixed-revision viewing. Packaging (`make addon`, `make viewer`) and the standalone-app acceptance run are described in the [toolchain guide](toolchain/README.md). Current results and known limits are in [status.md](doc/status.md).
 
 ## Samples
 

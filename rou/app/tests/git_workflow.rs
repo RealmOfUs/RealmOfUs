@@ -80,7 +80,9 @@ pathlib.Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps(repor
         self.command(env!("CARGO_BIN_EXE_rou"), root, args)
     }
     fn rou(&self, root: &Path, args: &[&str]) -> Value {
-        let result = self.raw(root, args);
+        let mut machine_args = vec!["--json"];
+        machine_args.extend_from_slice(args);
+        let result = self.raw(root, &machine_args);
         assert!(
             result.status.success(),
             "rou {args:?}: {}{}",
@@ -174,12 +176,7 @@ fn init_readme_commit_and_human_status() {
     f.write("README.md", b"A first text commit\n");
     f.rou(&f.root, &["add", "."]);
     f.rou(&f.root, &["commit", "-m", "README first"]);
-    assert!(
-        f.rou(&f.root, &["status"])
-            .as_str()
-            .unwrap()
-            .contains("Selection:")
-    );
+    assert!(String::from_utf8_lossy(&f.raw(&f.root, &["status"]).stdout).contains("Selection:"));
     assert_eq!(
         f.rou(&f.root, &["status", "--json"])["domain_validation"],
         "not_run"
@@ -220,7 +217,10 @@ fn view_allows_external_ancestor_links_but_rejects_bundle_links() {
     symlink(&actual, &alias).unwrap();
     let output = alias.join("new-parent/bundle");
     for _ in 0..2 {
-        let report = f.rou(&f.root, &["view", "--output", output.to_str().unwrap()]);
+        let report = f.rou(
+            &f.root,
+            &["view", "--all", "--output", output.to_str().unwrap()],
+        );
         assert_eq!(
             Path::new(report["manifest"].as_str().unwrap()),
             actual
@@ -237,7 +237,10 @@ fn view_allows_external_ancestor_links_but_rejects_bundle_links() {
         .unwrap();
     let under_tmp = temporary.path().join("new-parent/bundle");
     for _ in 0..2 {
-        f.rou(&f.root, &["view", "--output", under_tmp.to_str().unwrap()]);
+        f.rou(
+            &f.root,
+            &["view", "--all", "--output", under_tmp.to_str().unwrap()],
+        );
     }
     assert!(under_tmp.join("realm.json").is_file());
     let manifest = fs::read(output.join("realm.json")).unwrap();
@@ -253,7 +256,10 @@ fn view_allows_external_ancestor_links_but_rejects_bundle_links() {
         dangling,
         author_link.join("realm"),
     ] {
-        let result = f.raw(&f.root, &["view", "--output", path.to_str().unwrap()]);
+        let result = f.raw(
+            &f.root,
+            &["view", "--all", "--output", path.to_str().unwrap()],
+        );
         assert!(!result.status.success());
         assert!(
             String::from_utf8_lossy(&result.stderr).contains("unsafe_path"),
@@ -265,7 +271,10 @@ fn view_allows_external_ancestor_links_but_rejects_bundle_links() {
     let preserved = actual.join("preserved-objects");
     fs::rename(&objects, &preserved).unwrap();
     symlink(&preserved, &objects).unwrap();
-    let result = f.raw(&f.root, &["view", "--output", output.to_str().unwrap()]);
+    let result = f.raw(
+        &f.root,
+        &["view", "--all", "--output", output.to_str().unwrap()],
+    );
     assert!(!result.status.success());
     assert!(String::from_utf8_lossy(&result.stderr).contains("unsafe_path"));
     fs::remove_file(&objects).unwrap();
@@ -281,9 +290,12 @@ fn view_allows_external_ancestor_links_but_rejects_bundle_links() {
     fs::rename(&asset, &outside).unwrap();
     symlink(&outside, &asset).unwrap();
     assert!(
-        !f.raw(&f.root, &["view", "--output", output.to_str().unwrap()])
-            .status
-            .success()
+        !f.raw(
+            &f.root,
+            &["view", "--all", "--output", output.to_str().unwrap()]
+        )
+        .status
+        .success()
     );
     assert_eq!(manifest, fs::read(output.join("realm.json")).unwrap());
     assert_eq!(bytes, fs::read(&outside).unwrap());
@@ -1185,13 +1197,18 @@ os.execv({git:?}, [{git:?}, *sys.argv[1:]])
         )
         .spawn()
         .unwrap();
-    let deadline = Instant::now() + Duration::from_secs(15);
+    // Allow real Git/LFS startup on loaded machines before testing signal cleanup.
+    let deadline = Instant::now() + Duration::from_secs(60);
     let marker = clone.join(".rou/index-test-started");
     while !marker.exists() && Instant::now() < deadline {
         assert!(child.try_wait().unwrap().is_none());
         std::thread::sleep(Duration::from_millis(20));
     }
-    assert!(marker.exists());
+    if !marker.exists() {
+        let _ = child.kill();
+        let _ = child.wait();
+        panic!("hydration did not reach index refresh within 60 seconds");
+    }
     let index_lock = clone.join(".git/index.lock");
     assert!(index_lock.exists());
     assert!(
@@ -1218,4 +1235,201 @@ os.execv({git:?}, [{git:?}, *sys.argv[1:]])
             .success()
     );
     assert_eq!(fs::read(index_lock).unwrap(), b"foreign writer");
+}
+
+#[test]
+fn arbitrary_git_commands_and_native_help_are_forwarded() {
+    let f = Fixture::new();
+    f.seed();
+    for args in [
+        vec!["tag", "-l"],
+        vec!["stash", "list"],
+        vec!["show", "HEAD"],
+        vec!["rev-parse", "--show-prefix"],
+        vec!["ls-tree", "HEAD"],
+    ] {
+        let output = f.raw(&f.root, &args);
+        assert!(output.status.success());
+        assert_eq!(output.stdout, f.git(&f.root, &args));
+    }
+    for args in [vec!["help", "rev-parse"], vec!["rev-parse", "--help"]] {
+        let output = f
+            .command_builder(env!("CARGO_BIN_EXE_rou"), &f.root, &args)
+            .env("GIT_MAN_VIEWER", "cat")
+            .output()
+            .unwrap();
+        assert!(!String::from_utf8_lossy(&output.stderr).contains("unrecognized subcommand"));
+    }
+    let unknown = f.raw(&f.root, &["not-a-git-command"]);
+    assert!(!unknown.status.success());
+    assert!(String::from_utf8_lossy(&unknown.stderr).contains("is not a git command"));
+    let reserved = f.raw(&f.root, &["commit", "--amend"]);
+    assert_eq!(reserved.status.code(), Some(2));
+    let help = f.raw(&f.root, &["--help"]);
+    let help = String::from_utf8_lossy(&help.stdout);
+    assert!(help.contains("Any other command is forwarded to Git unchanged"));
+    assert!(!help.contains("Native Git commands ("));
+    assert!(
+        !help
+            .lines()
+            .any(|line| line.trim_start().starts_with("tag "))
+    );
+}
+
+#[test]
+fn human_reports_preserve_git_output_and_global_json_reports() {
+    let f = Fixture::new();
+    f.seed();
+    f.write("README.md", b"Human-readable output\n");
+    f.rou(&f.root, &["add", "README.md"]);
+    let commit = f.raw(&f.root, &["commit", "-m", "Readable commit"]);
+    assert!(commit.status.success());
+    let text = String::from_utf8_lossy(&commit.stdout);
+    assert!(text.lines().next().unwrap().starts_with("[main "));
+    assert!(text.contains("Realm: 2 entities, 2 models validated"));
+    assert!(!text.contains("git_output"));
+    let switched = f.raw(&f.root, &["switch", "-c", "feature/output"]);
+    assert!(switched.status.success());
+    assert!(String::from_utf8_lossy(&switched.stderr).contains("Switched to a new branch"));
+    for args in [
+        vec!["--json", "validate"],
+        vec!["validate", "--json"],
+        vec!["sparse", "list", "--json"],
+        vec!["diff", "--realm", "HEAD", "--json"],
+    ] {
+        let output = f.raw(&f.root, &args);
+        assert!(output.status.success(), "{args:?}: {:?}", output.stderr);
+        serde_json::from_slice::<Value>(&output.stdout).unwrap();
+    }
+    let selection = f.raw(&f.root, &["sparse", "list"]);
+    assert_eq!(
+        String::from_utf8_lossy(&selection.stdout),
+        "All: false\nChunks: none\nEntities: none\n"
+    );
+    let build = f.raw(&f.root, &["build"]);
+    assert!(String::from_utf8_lossy(&build.stdout).contains("Built 0 models; reused 2"));
+    let view = f.raw(&f.root, &["view", "--entity", "house"]);
+    assert!(String::from_utf8_lossy(&view.stdout).contains("2 models included, 0 missing"));
+    let diff = f.raw(&f.root, &["diff", "--realm", "HEAD"]);
+    assert!(
+        String::from_utf8_lossy(&diff.stdout)
+            .contains("Entities:\n  unchanged\nModels:\n  unchanged")
+    );
+    let machine = f.rou(&f.root, &["validate"]);
+    assert_eq!(machine.as_object().unwrap().len(), 8);
+    assert_eq!(machine["entity_count"], 2);
+    assert!(machine["byte_validation_complete"].as_bool().unwrap());
+}
+
+#[test]
+fn browse_selection_is_offline_by_default_and_explicit_selectors_fetch_only_assets() {
+    let f = Fixture::new();
+    let exporter = fs::read_to_string(&f.blender).unwrap().replace(
+        "with_name('triangle.glb')",
+        "with_name(model['id'] + '.glb')",
+    );
+    fs::write(&f.blender, exporter).unwrap();
+    for id in ["house", "bench"] {
+        let (mut document, binary) = common::triangle();
+        document["extras"] = value!({"model": id});
+        fs::write(
+            f._temp.path().join(format!("{id}.glb")),
+            common::glb(&document, &binary),
+        )
+        .unwrap();
+    }
+    f.seed();
+    let remote = f.remote();
+    let clone = f.clone_realm(&remote, "browser");
+    let empty = f.rou(&clone, &["view"]);
+    assert_eq!(empty["entity_count"], 2);
+    assert_eq!(empty["downloaded_entities"], value!([]));
+    let bundle = Path::new(empty["manifest"].as_str().unwrap())
+        .parent()
+        .unwrap();
+    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 0);
+    f.rou(&clone, &["sparse", "set", "--entity", "house"]);
+    let trace = f._temp.path().join("browse-trace.log");
+    let output = f
+        .command_builder(
+            env!("CARGO_BIN_EXE_rou"),
+            &clone,
+            &["view", "HEAD", "--json"],
+        )
+        .env("GIT_TRACE", &trace)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{:?}", output.stderr);
+    let selected: Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(selected["downloaded_entities"], value!(["house"]));
+    let trace = fs::read_to_string(trace).unwrap();
+    assert!(!trace.contains("git-lfs smudge") && !trace.contains("git-lfs fetch"));
+    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 1);
+    let catalog: Manifest = json::parse(&fs::read(bundle.join("realm.json")).unwrap()).unwrap();
+    assert_eq!(catalog.entities.len(), 2);
+    let house = catalog
+        .entities
+        .iter()
+        .find(|entity| entity.id == "house")
+        .unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::MetadataExt;
+        assert_eq!(
+            fs::metadata(bundle.join(&house.asset.path)).unwrap().ino(),
+            fs::metadata(clone.join("runtime/house.glb")).unwrap().ino()
+        );
+    }
+    assert!(
+        rou_core::lfs::pointer(&fs::read(clone.join("runtime/bench.glb")).unwrap())
+            .unwrap()
+            .is_some()
+    );
+    let chunk = f.rou(&clone, &["view", "--chunk", "1,0,-1..1,0,0"]);
+    assert_eq!(chunk["downloaded_entities"], value!(["bench"]));
+    assert!(!clone.join("sources/bench").exists());
+    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 1);
+    let all = f.rou(&clone, &["view", "--all"]);
+    assert_eq!(all["downloaded_entities"], value!(["bench", "house"]));
+    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 2);
+    let draft = f.rou(&clone, &["view", "--worktree"]);
+    assert_eq!(draft["downloaded_entities"], value!(["house"]));
+    assert_eq!(draft["version"]["commit_oid"], "");
+    let explicit = f.rou(&clone, &["view", "--worktree", "--entity", "bench"]);
+    assert_eq!(explicit["downloaded_entities"], value!(["bench"]));
+    assert!(
+        !f.raw(&clone, &["view", "--all", "--entity", "house"])
+            .status
+            .success()
+    );
+    assert!(
+        !f.raw(&clone, &["view", "--all", "--chunk", "0,0,0"])
+            .status
+            .success()
+    );
+    assert!(
+        !f.raw(&clone, &["view", "--entity", "unknown"])
+            .status
+            .success()
+    );
+    assert!(
+        !f.raw(&clone, &["view", "--chunk", "999,0,0"])
+            .status
+            .success()
+    );
+    // Editing the worktree's runtime bytes must not leak into a fixed revision.
+    fs::write(clone.join("runtime/house.glb"), b"changed worktree asset").unwrap();
+    let fixed = f.rou(&clone, &["view", "--entity", "house"]);
+    let fixed: Manifest =
+        json::parse(&fs::read(fixed["manifest"].as_str().unwrap()).unwrap()).unwrap();
+    let house = fixed
+        .entities
+        .iter()
+        .find(|entity| entity.id == "house")
+        .unwrap();
+    house
+        .asset
+        .descriptor()
+        .verify(&fs::read(bundle.join(&house.asset.path)).unwrap())
+        .unwrap();
 }
