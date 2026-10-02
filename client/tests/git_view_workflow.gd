@@ -1,5 +1,6 @@
 ## Exercise fixed Git view bundles without invoking Git, LFS or Blender.
 extends SceneTree
+const Streaming = preload("streaming.gd")
 
 const Core = preload("res://core.gd")
 
@@ -19,8 +20,7 @@ func _initialize() -> void:
 
 
 func drain(viewer: Node3D) -> void:
-	while not viewer.queue.is_empty():
-		viewer.import_one(viewer.queue.pop_front())
+	check(await Streaming.drain(viewer), "Background imports complete before deadline")
 
 	for entity_id: String in viewer.loaded_bounds:
 		var actual: Dictionary = viewer.loaded_bounds[entity_id]
@@ -78,7 +78,7 @@ func check_bundle_paths(viewer: Node3D, bundle: String) -> void:
 				DirAccess.remove_absolute(temporary.path_join(name))
 			DirAccess.remove_absolute(temporary)
 	check(viewer.open_realm(bundle), "Restore original bundle after layout checks")
-	drain(viewer)
+	await drain(viewer)
 	viewer.error_dialog.hide()
 
 
@@ -104,8 +104,13 @@ func run_test() -> void:
 	check(options.has("selected"), "Default selection bundle supplied")
 	check(viewer.open_realm(options.selected), "Default selection bundle opens")
 	check(viewer.catalog.size() == 4, "Partial bundle retains the complete catalog")
-	viewer.import_one("bench")
+	viewer.set_pose(viewer.layout.entities.bench.focus)
+	await drain(viewer)
 	check(viewer.rejected.get("bench") == "Asset missing", "Unselected model is missing")
+	check(viewer.impostors.instances.bench.visible, "Missing asset retains its box")
+	check(viewer.impostors.instances.bench.error == "Asset missing", "Missing box is marked")
+	viewer.navigate_position(Vector3(500, 500, 500))
+	check(viewer.impostors.instances.bench.visible, "Missing box remains visible in far tier")
 	var missing_chunk: String = Core.invoke("spatial.key", viewer.catalog.bench.owner_chunk).value
 	check(viewer.chunk_state(missing_chunk) == "Asset missing", "Unselected chunk is not empty")
 
@@ -127,14 +132,14 @@ func run_test() -> void:
 	check(not viewer.manifest.has("entries"), "Preview has no viewing entries")
 	viewer.world_ui.select_entity("house")
 	viewer.world_ui.visit_entity()
-	drain(viewer)
+	await drain(viewer)
 	check(viewer.rejected.is_empty(), "Initial GLB payloads validated")
 	check(not viewer.loaded.is_empty(), "Nearby world models instantiated")
 	var initial_count: int = viewer.loaded.size()
 	viewer.reload_button.pressed.emit()
 	viewer.world_ui.select_entity("house")
 	viewer.world_ui.visit_entity()
-	drain(viewer)
+	await drain(viewer)
 	check(viewer.current_version == first, "Reload keeps immutable version")
 	check(viewer.loaded.size() == initial_count, "Reload does not duplicate entities")
 	check(not viewer.open_realm(options.updated, first), "Version mismatch rejected")
@@ -144,7 +149,7 @@ func run_test() -> void:
 	check(viewer.current_version != first, "New bundle has a different Git commit")
 	viewer.world_ui.select_entity("house")
 	viewer.world_ui.visit_entity()
-	drain(viewer)
+	await drain(viewer)
 	check(viewer.rejected.is_empty(), "Updated GLB payloads validated")
 	var commit: String = viewer.current_version
 	var source: String = viewer.realm_path.get_base_dir()
@@ -164,7 +169,8 @@ func run_test() -> void:
 				source.path_join(entity.asset.path), temporary.path_join(entity.asset.path)
 			)
 	check(viewer.open_realm(temporary), "Complete metadata opens with missing payload")
-	viewer.import_one("house")
+	viewer.set_pose(viewer.layout.entities.house.focus)
+	await drain(viewer)
 	check(viewer.rejected.get("house") == "Asset missing", "Missing payload reported")
 	var chunk: String = Core.invoke("spatial.key", viewer.catalog.house.owner_chunk).value
 	check(viewer.chunk_state(chunk) == "Asset missing", "Missing model is not an empty chunk")
@@ -188,7 +194,7 @@ func run_test() -> void:
 	check(viewer.open_realm(options.updated), "Recovered original complete view")
 	viewer.world_ui.select_entity("house")
 	viewer.world_ui.visit_entity()
-	drain(viewer)
+	await drain(viewer)
 	check(viewer.rejected.is_empty(), "Recovery clears missing/rejected state")
 	# Layout failures are detected before replacing the active catalog or camera.
 	DirAccess.copy_absolute(source.path_join("realm.json"), temporary.path_join("realm.json"))
@@ -209,7 +215,7 @@ func run_test() -> void:
 	DirAccess.rename_absolute(moved_objects, object_dir)
 	check(viewer.current_version == commit, "Symlink failure preserves active version")
 	viewer.error_dialog.hide()
-	check_bundle_paths(viewer, temporary)
+	await check_bundle_paths(viewer, temporary)
 	# Coordinate input is in metres and is passed to Rust without UI conversion.
 	viewer.world_ui.coordinate_input.text = "10.25,3,-2.5"
 	viewer.world_ui.jump_to_input()
@@ -291,18 +297,23 @@ func run_test() -> void:
 	viewer.world_ui.select_entity("house")
 	viewer.world_ui.visit_entity()
 	check(viewer.queue.size() == 2, "Both placed instances are queued")
+	check(viewer.impostors.instances.size() == 2, "All catalog entities have boxes before import")
+	check(viewer.impostors.instances.house.visible, "Loading asset keeps its placeholder")
 	viewer.navigate_position(Vector3(300, 300, 300))
 	check(
 		viewer.queue.is_empty() and viewer.cancellations == 2,
 		"Moving away cancels obsolete queued imports"
 	)
 	viewer.world_ui.visit_entity()
-	drain(viewer)
+	await drain(viewer)
 	check(
 		viewer.loaded.size() == 2 and viewer.asset_imports == 1,
 		"Shared GLB imports once for two instances"
 	)
 	check(viewer.loaded.house != viewer.loaded.house_copy, "Instances have independent scene nodes")
+	check(viewer.background_imports == 1, "Shared asset was read and validated on a worker")
+	check(not viewer.impostors.instances.house.visible, "Mounted scene hides its box")
+	check(not viewer.impostors.instances.house_copy.visible, "Every mounted instance hides its box")
 	check(
 		is_equal_approx(viewer.loaded.house_copy.position.x - viewer.loaded.house.position.x, 2),
 		"Shared model preserves independent placement"
@@ -312,17 +323,53 @@ func run_test() -> void:
 		viewer.loaded.is_empty() and viewer.world.get_child_count() == 0 and viewer.unloads == 2,
 		"Leaving the radius detaches both instances"
 	)
+	check(viewer.impostors.instances.house.visible, "Unloaded model restores its box")
 	viewer.world_ui.visit_entity()
-	drain(viewer)
+	await drain(viewer)
 	check(viewer.asset_imports == 1, "Reentry reuses the immutable prototype")
-	write_text(temporary.path_join(original.asset.path), "bad GLB")
+	check(viewer.set_radii_text("16,64,4000"), "CLI radius syntax is accepted")
+	viewer.navigate_position(Vector3(0, 120, 0))
+	check(
+		viewer.loaded.is_empty() and viewer.queue.is_empty(), "Smaller middle radius unloads models"
+	)
+	check(viewer.impostors.instances.house.visible, "Distant models are still visible as boxes")
+	check(viewer.set_radii(Core.config().viewer.radii), "Default radii restore")
+	check(viewer.queue.size() == 2, "Default radius selects a different loading set")
+	check(not viewer.set_radii_text("64,16,4000"), "Unordered radii are rejected")
+	viewer.world_ui.radius_inputs[0].get_line_edit().text = "16"
+	viewer.world_ui.radius_inputs[1].get_line_edit().text = "64"
+	viewer.world_ui.apply_radii()
+	check(viewer.radii == [16.0, 64.0, 4000.0], "Settings apply the same Rust radius rules")
+	viewer.set_radii(Core.config().viewer.radii)
+	var tampered := FileAccess.get_file_as_bytes(temporary.path_join(original.asset.path))
+	tampered[tampered.size() - 1] ^= 1
+	var tampered_file := FileAccess.open(temporary.path_join(original.asset.path), FileAccess.WRITE)
+	tampered_file.store_buffer(tampered)
+	tampered_file.close()
 	check(viewer.open_realm(temporary), "Metadata still opens before streamed bytes are read")
 	viewer.world_ui.select_entity("house")
 	viewer.world_ui.visit_entity()
-	drain(viewer)
+	await drain(viewer)
 	check(
 		viewer.rejected.size() == 2 and viewer.asset_imports == 0,
 		"Corrupt bytes rejected before any engine import"
+	)
+	check(viewer.impostors.instances.house.visible, "Tampered model retains its box")
+	check(not viewer.impostors.instances.house.error.is_empty(), "Tampered box shows rejection")
+	# A world switch while workers are pending must not install their old scenes.
+	check(viewer.open_realm(options.updated), "Open a valid bundle before switching during import")
+	viewer.set_pose(viewer.layout.entities.house.focus)
+	viewer.pump_streaming()
+	check(viewer.loader.import_count() > 0, "An import task is outstanding")
+	viewer.clear_realm()
+	var deadline := Time.get_ticks_msec() + 30000
+	while not viewer.retired_loaders.is_empty() and Time.get_ticks_msec() < deadline:
+		viewer.pump_streaming()
+		await process_frame
+	check(viewer.retired_loaders.is_empty(), "Retired worker results are drained")
+	check(
+		viewer.loaded.is_empty() and viewer.world.get_child_count() == 0,
+		"Old results never mount after clear"
 	)
 	var sample: Dictionary = (
 		Core

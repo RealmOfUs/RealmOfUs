@@ -27,7 +27,7 @@ def run_godot(script: str, log: Path, marker: str, user_args: list[str]) -> str:
     result = subprocess.run(command, capture_output=True, text=True, timeout=120)
     output = result.stdout + result.stderr
     log.write_text(output)
-    if result.returncode or marker not in result.stdout or "SCRIPT ERROR:" in output:
+    if result.returncode or marker not in result.stdout or "ERROR:" in output:
         raise RuntimeError(output)
     return output
 

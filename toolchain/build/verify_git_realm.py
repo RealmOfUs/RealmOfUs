@@ -66,6 +66,8 @@ class Acceptance:
             }
         )
         self.save()
+        if Path(command[0]).name.lower() == "godot" and "ERROR:" in log.read_text():
+            raise RuntimeError(f"Godot logged an error; see {log}")
         if expected is not None and result.returncode != expected:
             raise RuntimeError(
                 f"Command failed ({result.returncode}): {command}; see {log}\n{result.stderr[-2000:]}"
@@ -308,7 +310,7 @@ class Acceptance:
         if not git_only:
             native.godot_extension()
             godot = ["godot"] + ([] if windowed else ["--headless"])
-            self.run(
+            godot_output = self.run(
                 godot
                 + [
                     "--path",
@@ -322,6 +324,8 @@ class Acceptance:
                     "--report=" + str(self.directory / "godot-report.json"),
                 ]
             )
+            if "GIT_VIEW_WORKFLOW_PASS " not in godot_output:
+                raise RuntimeError("Godot fixed-version workflow did not finish")
             self.check("Godot fixed-version workflow", True)
         (self.directory / "versions.json").write_text(
             json.dumps(

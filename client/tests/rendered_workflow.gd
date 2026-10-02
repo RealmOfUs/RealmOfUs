@@ -54,7 +54,7 @@ func key(code: Key, command: bool = false) -> void:
 
 func settle() -> void:
 	var start := Time.get_ticks_msec()
-	while not viewer.queue.is_empty():
+	while viewer.streaming_busy():
 		if Time.get_ticks_msec() - start > 30000:
 			check(false, "Loading timed out")
 			break
@@ -215,7 +215,7 @@ func authoring_reload() -> void:
 	check("empty" in viewer.status_label.text.to_lower(), "Empty world has explicit status")
 	await capture("empty-world")
 	check(viewer.open_realm(workflow.path_join("missing/realm.json")), "Open missing-asset catalog")
-	while not viewer.queue.is_empty():
+	while viewer.streaming_busy():
 		await process_frame
 	check(viewer.rejected.has("test_entity"), "Missing asset has explicit rejection")
 	await capture("missing-asset")

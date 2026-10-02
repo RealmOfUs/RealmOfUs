@@ -4,6 +4,11 @@ signal realm_cleared
 signal asset_loaded(node: Node3D)
 const Core = preload("core.gd")
 const LocalCatalog = preload("local_catalog.gd")
+const Loader = preload("loader.gd")
+const Impostors = preload("impostors.gd")
+const MAX_MOUNTS_PER_FRAME := 1
+const MAX_IDLE_PROTOTYPES := 4
+const PROTOTYPE_IDLE_SECONDS := 5.0
 var camera := Camera3D.new()
 var world := Node3D.new()
 var grid := Node3D.new()
@@ -32,7 +37,24 @@ var asset_root := ""
 var loaded: Dictionary = {}
 var loaded_bounds: Dictionary = {}
 var rejected: Dictionary = {}
+var rejection_codes: Dictionary = {}
 var prototypes: Dictionary = {}
+var loader: RefCounted
+var retired_loaders: Array[RefCounted] = []
+var impostors: MultiMeshInstance3D
+var asset_ids: Dictionary = {}
+var asset_failures: Dictionary = {}
+var radii: Array = []
+var tiers: Dictionary = {"near": [], "mid": [], "far": []}
+var near_ids: Dictionary = {}
+var mesh_instances: Dictionary = {}
+var detail_levels: Dictionary = {}
+var pump_scheduled := false
+var residency_changed := false
+var recording_frames := false
+var generated_lods := 0
+var background_imports := 0
+var discarded_imports := 0
 var queue: Array[String] = []
 var options: Dictionary = {}
 var last_error := ""
@@ -51,6 +73,10 @@ var first_ready := -1.0
 var first_presented := -1.0
 var frame_times: Array[float] = []
 var import_times: Array[float] = []
+var mount_times: Array[float] = []
+var scene_times: Array[float] = []
+var mount_frames: Array[float] = []
+var steady_frames: Array[float] = []
 var focused_frames := 0
 var unfocused_frames := 0
 var capture_done := false
@@ -64,11 +90,15 @@ func _ready() -> void:
 			var pair := arg.substr(2).split("=", true, 1)
 			options[pair[0]] = pair[1] if pair.size() > 1 else "true"
 	Engine.max_fps = 0 if options.has("benchmark") else 60
+	radii = Core.config().viewer.radii.duplicate()
 	setup_world()
 	world_ui = preload("world_ui.gd").new()
 	world_ui.setup(self)
 	world_ui.cleared()
 	set_time(false)
+	if options.has("radius") and not set_radii_text(options.radius):
+		fail("Invalid --radius: enter positive ordered near,middle,far metres")
+		return
 	if options.get("sample", "") == "villa-anahid":
 		var sample = load("res://samples/villa_anahid.gd")
 		if sample == null:
@@ -131,6 +161,20 @@ func open_realm(path: String, ref: String = "") -> bool:
 	current_version = repository_info.get("commit_oid", "")
 	for entity: Dictionary in manifest.entities:
 		catalog[entity.id] = entity
+	loader = Loader.new()
+	var assets: Dictionary = {}
+	for id: String in catalog:
+		var asset: Dictionary = catalog[id].asset
+		assets[asset.sha256] = asset
+		if not asset_ids.has(asset.sha256):
+			asset_ids[asset.sha256] = []
+		asset_ids[asset.sha256].append(id)
+	# Initialize the shared stateless adapter before any worker calls it.
+	Core.config()
+	loader.scan(asset_root, assets)
+	impostors = Impostors.new()
+	impostors.setup(layout.impostors)
+	add_child(impostors)
 	setup_grid()
 	set_pose(initial)
 	world_ui.opened()
@@ -148,9 +192,22 @@ func clear_realm() -> void:
 	for node: Node in grid.get_children():
 		grid.remove_child(node)
 		node.queue_free()
-	for prototype: Node in prototypes.values():
-		prototype.free()
+	if loader != null:
+		retired_loaders.append(loader)
+		loader = null
+	if is_instance_valid(impostors):
+		remove_child(impostors)
+		impostors.queue_free()
+		impostors = null
+	for prototype: Dictionary in prototypes.values():
+		Loader.dispose(prototype)
 	prototypes.clear()
+	asset_ids.clear()
+	asset_failures.clear()
+	mesh_instances.clear()
+	detail_levels.clear()
+	near_ids.clear()
+	tiers = {"near": [], "mid": [], "far": []}
 	manifest.clear()
 	catalog.clear()
 	layout.clear()
@@ -160,9 +217,19 @@ func clear_realm() -> void:
 	loaded.clear()
 	loaded_bounds.clear()
 	rejected.clear()
+	rejection_codes.clear()
 	queue.clear()
 	frame_times.clear()
 	import_times.clear()
+	mount_times.clear()
+	scene_times.clear()
+	mount_frames.clear()
+	steady_frames.clear()
+	residency_changed = false
+	recording_frames = false
+	generated_lods = 0
+	background_imports = 0
+	discarded_imports = 0
 	total_chunks = 0
 	current_version = ""
 	current_chunk_key = ""
@@ -192,7 +259,8 @@ func clear_realm() -> void:
 
 func fail(message: String) -> void:
 	last_error = message
-	push_error(message)
+	# Invalid user input is handled here; engine/runtime errors remain fatal to acceptance.
+	push_warning(message)
 	status_label.text = message
 	error_dialog.dialog_text = message
 	if not options.has("benchmark"):
@@ -283,86 +351,197 @@ func jump_to_chunk(selector: String) -> bool:
 	return true
 
 
+func set_radii_text(text: String) -> bool:
+	var parsed := Core.invoke("viewer.at", text)
+	return set_radii(parsed.value) if parsed.ok else false
+
+
+func set_radii(values: Array) -> bool:
+	var checked := Core.invoke("viewer.radii", values)
+	if not checked.ok:
+		return false
+	radii = checked.value
+	if world_ui != null:
+		world_ui.sync_radii()
+	camera.far = maxf(350.0, radii[2] * 1.2)
+	refresh_assets()
+	return true
+
+
 func refresh_assets() -> void:
 	if manifest.is_empty():
 		return
 	var response := native_catalog.catalog_query(
-		JSON.stringify(Core.array(camera.position)).to_utf8_buffer()
+		(
+			JSON
+			. stringify(
+				{"position": Core.array(camera.position), "radii": radii, "loaded": loaded.keys()}
+			)
+			. to_utf8_buffer()
+		)
 	)
 	if not response.ok:
 		return
-	var needed: Array = response.value.entity_ids
+	var needed: Array = response.value.load
+	tiers = response.value.tiers
+	near_ids.clear()
+	for id: String in tiers.near:
+		near_ids[id] = true
 	selected_chunks = response.value.selected_chunks
 	current_chunk_key = response.value.chunk_key
-	for id: String in loaded.keys():
-		if not id in needed:
-			world.remove_child(loaded[id])
-			loaded[id].queue_free()
-			loaded.erase(id)
-			loaded_bounds.erase(id)
-			unloads += 1
+	for id: String in response.value.unload:
+		world.remove_child(loaded[id])
+		loaded[id].queue_free()
+		loaded.erase(id)
+		loaded_bounds.erase(id)
+		mesh_instances.erase(id)
+		detail_levels.erase(id)
+		unloads += 1
+		residency_changed = true
+	# Detached scenes no longer render, so boxes can be restored in the same frame.
+	impostors.apply(response.value.impostor_visible, response.value.impostor_hidden)
+	var wanted: Dictionary = {}
+	for id: String in needed:
+		wanted[id] = true
 	for id: String in queue:
-		if not id in needed:
+		if not wanted.has(id):
 			cancellations += 1
 	queue.clear()
 	for id: String in needed:
-		if not loaded.has(id) and not rejected.has(id):
+		if not rejected.has(id):
 			queue.append(id)
+	for id: String in loaded:
+		apply_detail(id)
+	prune_prototypes()
 
 
-func import_one(id: String) -> void:
-	if loaded.has(id) or not catalog.has(id):
+func apply_detail(id: String) -> void:
+	var near: bool = near_ids.has(id)
+	if detail_levels.get(id) == near:
 		return
-	var started := Time.get_ticks_usec()
-	var entity: Dictionary = catalog[id]
-	var asset: Dictionary = entity.asset
-	if not prototypes.has(asset.sha256):
-		var path: String = asset_root.path_join(asset.path)
-		var folder := DirAccess.open(path.get_base_dir())
-		if (
-			DirAccess.open(asset_root).is_link("objects")
-			or (folder != null and folder.is_link(path.get_file()))
-		):
-			rejected[id] = "Symlink asset forbidden"
-			return
-		var file := FileAccess.open(path, FileAccess.READ)
-		if file == null:
-			rejected[id] = "Asset missing"
-			return
-		if file.get_length() > Core.config().limits.glb_bytes:
-			rejected[id] = "Asset size mismatch"
-			return
-		var bytes := file.get_buffer(file.get_length())
-		var inspected := Core.invoke("glb.inspect", bytes)
-		if not inspected.ok:
-			rejected[id] = Core.message(inspected)
-			return
-		var matches := Core.invoke(
-			"asset.match", {"asset": asset, "actual": inspected.value.descriptor}
+	for mesh: GeometryInstance3D in mesh_instances[id]:
+		mesh.lod_bias = 1.0 if near else .25
+		mesh.cast_shadow = (
+			GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+			if near
+			else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		)
-		if not matches.ok:
-			rejected[id] = "Asset hash mismatch"
-			return
-		var document := GLTFDocument.new()
-		var state := GLTFState.new()
-		if document.append_from_buffer(bytes, "", state) != OK:
-			rejected[id] = "glTF import failed"
-			return
-		var prototype: Node3D = document.generate_scene(state)
-		if prototype == null:
-			rejected[id] = "Empty glTF scene"
-			return
-		prototypes[asset.sha256] = prototype
+		mesh.gi_mode = (
+			GeometryInstance3D.GI_MODE_STATIC if near else GeometryInstance3D.GI_MODE_DISABLED
+		)
+	detail_levels[id] = near
+
+
+func reject_asset(sha: String, failure: Dictionary) -> void:
+	asset_failures[sha] = failure
+	for id: String in asset_ids.get(sha, []):
+		rejected[id] = failure.error
+		rejection_codes[id] = failure.code
+		impostors.reject(id, failure.error, failure.code)
+		queue.erase(id)
+
+
+func streaming_busy() -> bool:
+	return not queue.is_empty() or (loader != null and not loader.tasks.is_empty())
+
+
+func prune_prototypes() -> void:
+	var active: Dictionary = {}
+	for id: String in loaded.keys() + queue:
+		active[catalog[id].asset.sha256] = true
+	var now := Time.get_ticks_msec() / 1000.0
+	var idle: Array[String] = []
+	for sha: String in prototypes:
+		if active.has(sha):
+			prototypes[sha].used_at = now
+		else:
+			idle.append(sha)
+	idle.sort_custom(func(a, b): return prototypes[a].used_at < prototypes[b].used_at)
+	var excess := idle.size() - MAX_IDLE_PROTOTYPES
+	for sha: String in idle:
+		if excess > 0 or now - prototypes[sha].used_at > PROTOTYPE_IDLE_SECONDS:
+			Loader.dispose(prototypes[sha])
+			prototypes.erase(sha)
+			excess -= 1
+
+
+func pump_streaming() -> void:
+	pump_scheduled = false
+	for retired: RefCounted in retired_loaders.duplicate():
+		retired.discard_completed()
+		if retired.drained():
+			retired_loaders.erase(retired)
+	if loader == null:
+		return
+	for result: Dictionary in loader.take_completed():
+		if result.key == "availability":
+			if result.has("error"):
+				for sha: String in asset_ids:
+					reject_asset(sha, result)
+			else:
+				for sha: String in result.errors:
+					reject_asset(sha, result.errors[sha])
+			continue
+		if result.has("error"):
+			reject_asset(result.key, result)
+			continue
+		if asset_failures.has(result.key):
+			Loader.dispose(result)
+			discarded_imports += 1
+			continue
+		# Preserve validated results briefly even if the camera has moved away.
+		result.used_at = Time.get_ticks_msec() / 1000.0
+		prototypes[result.key] = result
 		asset_imports += 1
-	var scene: Node3D = prototypes[asset.sha256].duplicate()
-	world.add_child(scene)
+		background_imports += int(result.worker_task >= 0)
+		import_times.append(result.seconds * 1000.0)
+	if not loader.terminal_error.is_empty():
+		for id: String in queue.duplicate():
+			if not rejected.has(id):
+				reject_asset(catalog[id].asset.sha256, loader.terminal_error)
+	var mounted := 0
+	for id: String in queue.duplicate():
+		if rejected.has(id):
+			continue
+		var sha: String = catalog[id].asset.sha256
+		if prototypes.has(sha) and mounted < MAX_MOUNTS_PER_FRAME:
+			mount_asset(id)
+			queue.erase(id)
+			mounted += 1
+		elif not prototypes.has(sha) and loader.import_count() < Loader.MAX_IMPORT_TASKS:
+			loader.submit(asset_root, catalog[id].asset)
+	prune_prototypes()
+
+
+func mount_asset(id: String) -> void:
+	var started := Time.get_ticks_usec()
+	var sha: String = catalog[id].asset.sha256
+	if not prototypes[sha].has("scene"):
+		var failure := Loader.materialize(prototypes[sha])
+		scene_times.append((Time.get_ticks_usec() - started) / 1000.0)
+		residency_changed = true
+		if not failure.is_empty():
+			reject_asset(sha, failure)
+			Loader.dispose(prototypes[sha])
+			prototypes.erase(sha)
+			return
+		generated_lods += prototypes[sha].lods
+	var scene: Node3D = prototypes[sha].scene.duplicate()
 	scene.position = Core.vec(layout.entities[id].position)
+	world.add_child(scene)
 	loaded[id] = scene
+	mesh_instances[id] = scene.find_children("*", "GeometryInstance3D", true, false)
+	if scene is GeometryInstance3D:
+		mesh_instances[id].append(scene)
+	apply_detail(id)
 	var box := collect_bounds(scene)
 	loaded_bounds[id] = {"min": Core.array(box.position), "max": Core.array(box.end)}
+	# Replace the placeholder only once the full scene is mounted.
+	impostors.set_visible_entity(id, false)
 	asset_loaded.emit(scene)
 	imports += 1
-	import_times.append((Time.get_ticks_usec() - started) / 1000.0)
+	residency_changed = true
+	mount_times.append((Time.get_ticks_usec() - started) / 1000.0)
 
 
 func chunk_state(key: String) -> String:
@@ -377,9 +556,11 @@ func chunk_state(key: String) -> String:
 		return "Known empty"
 	for id: String in ids:
 		if rejected.has(id):
-			return "Asset missing" if rejected[id] == "Asset missing" else "Asset failed validation"
-		if not FileAccess.file_exists(asset_root.path_join(catalog[id].asset.path)):
-			return "Asset missing"
+			return (
+				"Asset missing"
+				if rejection_codes[id] == Loader.MISSING_ASSET
+				else "Asset failed validation"
+			)
 	for id: String in ids:
 		if id in queue:
 			return "Loading assets"
@@ -433,18 +614,26 @@ func _unhandled_input(event: InputEvent) -> void:
 func _process(delta: float) -> void:
 	var now := Time.get_ticks_usec()
 	age = (now - started_at) / 1000000.0
-	if first_ready >= 0 and age > first_ready + 2:
-		frame_times.append((now - last_tick) / 1000.0)
+	if recording_frames:
+		var elapsed := (now - last_tick) / 1000.0
+		frame_times.append(elapsed)
+		if residency_changed:
+			mount_frames.append(elapsed)
+		else:
+			steady_frames.append(elapsed)
 		if get_window().has_focus():
 			focused_frames += 1
 		else:
 			unfocused_frames += 1
+	recording_frames = true
+	residency_changed = false
 	last_tick = now
+	if not pump_scheduled:
+		pump_scheduled = true
+		pump_streaming.call_deferred()
 	if manifest.is_empty():
 		return
-	if not queue.is_empty():
-		import_one(queue.pop_front())
-	elif first_ready < 0:
+	if not streaming_busy() and first_ready < 0:
 		first_ready = age
 		if DisplayServer.get_name() != "headless":
 			announce_ready.call_deferred(open_serial)
@@ -491,13 +680,19 @@ func _process(delta: float) -> void:
 	if loaded.is_empty() and queue.is_empty() and rejected.is_empty() and not catalog.is_empty():
 		status_label.text = "No nearby entities \u00b7 Choose a place on the map or in the entity list"
 	diagnostic.text = (
-		"%.1f FPS \u00b7 %d imported assets\nCamera %.2f, %.2f, %.2f m"
+		"%.1f FPS \u00b7 %d imported assets\nCamera %.2f, %.2f, %.2f m\nRadii %s m \u00b7 Near %d / Mid %d / Far %d\nQueue %d \u00b7 Workers %d\nBoxes: blue available / orange missing / red rejected"
 		% [
 			Engine.get_frames_per_second(),
 			asset_imports,
 			camera.position.x,
 			camera.position.y,
-			camera.position.z
+			camera.position.z,
+			str(radii),
+			tiers.near.size(),
+			tiers.mid.size(),
+			tiers.far.size(),
+			queue.size(),
+			loader.tasks.size()
 		]
 	)
 	if (
@@ -505,7 +700,7 @@ func _process(delta: float) -> void:
 		and not capture_done
 		and first_ready >= 0
 		and age > first_ready + float(options.get("capture-after", "4"))
-		and queue.is_empty()
+		and not streaming_busy()
 	):
 		capture_done = true
 		capture.call_deferred()
@@ -520,8 +715,13 @@ func _process(delta: float) -> void:
 
 func _exit_tree() -> void:
 	save_recent()
-	for prototype: Node in prototypes.values():
-		prototype.free()
+	if loader != null:
+		loader.shutdown()
+	for retired: RefCounted in retired_loaders:
+		retired.shutdown()
+	retired_loaders.clear()
+	for prototype: Dictionary in prototypes.values():
+		Loader.dispose(prototype)
 	prototypes.clear()
 
 
@@ -532,7 +732,7 @@ func setup_world() -> void:
 	camera.current = true
 	camera.fov = 55
 	camera.near = .06
-	camera.far = 350
+	camera.far = maxf(350.0, radii[2] * 1.2)
 	var we := WorldEnvironment.new()
 	we.environment = environment
 	add_child(we)
@@ -677,6 +877,15 @@ func percentile(a: Array[float], p: float) -> float:
 	return b[mini(int(ceil(b.size() * p)) - 1, b.size() - 1)]
 
 
+func frame_summary(values: Array[float]) -> Dictionary:
+	return {
+		"count": values.size(),
+		"p50_ms": percentile(values, .50),
+		"p95_ms": percentile(values, .95),
+		"p99_ms": percentile(values, .99)
+	}
+
+
 func finish_report() -> void:
 	var report: Dictionary = {
 		"realm": realm_path,
@@ -688,16 +897,30 @@ func finish_report() -> void:
 		"first_presented_seconds": first_presented,
 		"user_data_dir": OS.get_user_data_dir(),
 		"frames": frame_times.size(),
+		"frame_sampling": "Second process tick after open; no warm-up exclusion",
 		"focused_frames": focused_frames,
 		"unfocused_frames": unfocused_frames,
 		"frame_ms_p50": percentile(frame_times, .50),
 		"frame_ms_p95": percentile(frame_times, .95),
 		"frame_ms_p99": percentile(frame_times, .99),
+		"mount_frames": frame_summary(mount_frames),
+		"steady_frames": frame_summary(steady_frames),
+		"radii": radii,
+		"tiers": {"near": tiers.near.size(), "mid": tiers.mid.size(), "far": tiers.far.size()},
+		"background_imports": background_imports,
+		"discarded_imports": discarded_imports,
+		"generated_lods": generated_lods,
+		"cached_prototypes": prototypes.size(),
 		"import_ms_p95": percentile(import_times, .95),
+		"mount_ms_p95": percentile(mount_times, .95),
+		"scene_ms_p95": percentile(scene_times, .95),
+		"main_thread_scenes": scene_times.size(),
+		"gltf_parse_in_worker": loader.parse_in_worker if loader != null else false,
 		"imports": imports,
 		"unloads": unloads,
 		"cancelled": cancellations,
 		"rejected": rejected,
+		"rejection_codes": rejection_codes,
 		"loaded_bounds": loaded_bounds,
 		"viewport":
 		[get_viewport().get_texture().get_width(), get_viewport().get_texture().get_height()],

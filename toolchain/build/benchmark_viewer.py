@@ -9,7 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run(command, report, seconds=30, user_args=None):
+def run(command, report, seconds=30, user_args=None, json_output=False, activate=False):
     report = Path(report).resolve()
     report.parent.mkdir(parents=True, exist_ok=True)
     report.unlink(missing_ok=True)
@@ -18,6 +18,7 @@ def run(command, report, seconds=30, user_args=None):
     log = report.with_suffix(".log")
     peak = 0
     samples = 0
+    rss_timeline = []
     first_presented_wall = None
     started = time.monotonic()
     with log.open("w") as stream:
@@ -30,14 +31,34 @@ def run(command, report, seconds=30, user_args=None):
             stdout=stream,
             stderr=subprocess.STDOUT,
         )
+        activation = None
         try:
+            if activate:
+                # Match the exported-app harness: activate this PID without opening another app.
+                time.sleep(1)
+                script = (
+                    'ObjC.import("AppKit"); '
+                    f"$.NSRunningApplication.runningApplicationWithProcessIdentifier({proc.pid})"
+                    ".activateWithOptions(3);"
+                )
+                activation = subprocess.run(
+                    ["/usr/bin/osascript", "-l", "JavaScript", "-e", script],
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
             while proc.poll() is None:
                 s = subprocess.run(
                     ["ps", "-o", "rss=", "-p", str(proc.pid)], capture_output=True, text=True
                 ).stdout.strip()
-                if s:
+                # Exclude exit-time zero RSS and teardown after the engine closes its report.
+                if s and int(s) > 0 and not report.exists():
                     peak = max(peak, int(s) * 1024)
                     samples += 1
+                    rss_timeline.append(
+                        {"seconds": time.monotonic() - started, "bytes": int(s) * 1024}
+                    )
                 if first_presented_wall is None and ready_report.exists():
                     first_presented_wall = time.monotonic() - started
                 if time.monotonic() - started > seconds + 120:
@@ -47,14 +68,20 @@ def run(command, report, seconds=30, user_args=None):
             if proc.poll() is None:
                 proc.terminate()
                 proc.wait(timeout=10)
-    if proc.returncode or not report.exists() or "SCRIPT ERROR:" in log.read_text():
+    if proc.returncode or not report.exists() or "ERROR:" in log.read_text():
         raise RuntimeError("Viewer failed: " + str(log))
     data = json.loads(report.read_text())
     if data.get("rejected") or data.get("frames", 0) == 0:
         raise RuntimeError("Viewer did not complete a usable measurement: " + str(log))
+    if data["mount_frames"]["count"] + data["steady_frames"]["count"] != data["frames"]:
+        raise RuntimeError("Frame groups do not partition the measurement: " + str(report))
     data.update(
+        activation_requested=activate,
+        activation_result=activation.stdout.strip() if activation else None,
         peak_rss_bytes=peak,
         rss_samples=samples,
+        rss_timeline=rss_timeline,
+        final_rss_bytes=rss_timeline[-1]["bytes"] if rss_timeline else 0,
         process_wall_seconds=time.monotonic() - started,
         first_presented_process_seconds=first_presented_wall,
         startup_observation="New process; OS file caches and driver shader caches were not cleared",
@@ -62,24 +89,28 @@ def run(command, report, seconds=30, user_args=None):
         and data.get("unfocused_frames", 0) == 0,
     )
     report.write_text(json.dumps(data, indent=2) + "\n")
-    print(
-        json.dumps(
-            {
-                k: data[k]
-                for k in [
-                    "realm",
-                    "frame_ms_p95",
-                    "first_ready_seconds",
-                    "peak_rss_bytes",
-                    "imports",
-                    "unloads",
-                    "cancelled",
-                    "viewport",
-                ]
-            }
-        ),
-        flush=True,
-    )
+    summary = {
+        k: data[k]
+        for k in [
+            "realm",
+            "frame_ms_p95",
+            "mount_frames",
+            "steady_frames",
+            "scene_ms_p95",
+            "main_thread_scenes",
+            "gltf_parse_in_worker",
+            "sdfgi",
+            "first_ready_seconds",
+            "peak_rss_bytes",
+            "final_rss_bytes",
+            "imports",
+            "unloads",
+            "cancelled",
+            "viewport",
+            "foreground_measurement_valid",
+        ]
+    }
+    print(json.dumps(summary, indent=None if json_output else 2), flush=True)
     return data
 
 
@@ -90,6 +121,12 @@ def main():
     p.add_argument("--realm", type=Path, help="Measure any local realm instead of a named fixture")
     p.add_argument("--report", type=Path, help="Write the measurement here")
     p.add_argument("--executable", type=Path, help="Use an exported viewer executable")
+    p.add_argument("--activate", action="store_true", help="Activate the measured macOS app PID")
+    p.add_argument("--json", action="store_true", help="Emit a compact JSON summary")
+    p.add_argument(
+        "--flight", action="store_true", help="Fly across the default world and release all assets"
+    )
+    p.add_argument("--radius", help="Near,middle,far radii in metres")
     p.add_argument("--balanced", action="store_true")
     p.add_argument("--daylight", action="store_true")
     p.add_argument("--at", help="Initial x,y,z in metres")
@@ -104,13 +141,26 @@ def main():
             if a.executable
             else ["godot", "--path", str(ROOT / "client/app")]
         )
+        if a.flight:
+            if a.executable:
+                p.error("--flight requires the development project test script")
+            command += ["--script", "../tests/benchmark_flight.gd"]
         arguments = ["--realm=" + str(a.realm.resolve())] if a.realm else []
         arguments += ["--" + flag for flag in ["balanced", "daylight"] if getattr(a, flag)]
+        if a.radius:
+            arguments.append("--radius=" + a.radius)
         if a.at:
             arguments.append("--at=" + a.at)
         if a.sample:
             arguments += ["--sample=" + a.sample, "--station=" + str(a.station)]
-        run(command, a.report or ROOT / "build/viewer/measurement.json", a.seconds, arguments)
+        run(
+            command,
+            a.report or ROOT / "build/viewer/measurement.json",
+            a.seconds,
+            arguments,
+            a.json,
+            a.activate,
+        )
         return
     dest = ROOT / "build" / (a.fixture + "-2.1") / "measurements"
     dest.mkdir(parents=True, exist_ok=True)

@@ -37,9 +37,15 @@ def compare_grids(fixture: dict) -> list[dict]:
         views = []
         for observation in fixture["observations"]:
             selection = core.call(
-                "viewer.query", {"manifest": variant, "position": observation["position"]}
+                "viewer.query",
+                {
+                    "manifest": variant,
+                    "position": observation["position"],
+                    "radii": [48, 48, 48],
+                    "loaded": [],
+                },
             )
-            selected = set(selection["entity_ids"])
+            selected = set(selection["load"])
             views.append(
                 {
                     "entry": observation["name"],

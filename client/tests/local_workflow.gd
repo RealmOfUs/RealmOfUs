@@ -1,5 +1,6 @@
 ## Local file selection, reload, failed-open recovery, empty worlds and source edits.
 extends SceneTree
+const Streaming = preload("streaming.gd")
 
 var errors: Array[String] = []
 var checks := 0
@@ -17,8 +18,7 @@ func _initialize() -> void:
 
 
 func drain(viewer: Node3D) -> void:
-	while not viewer.queue.is_empty():
-		viewer.import_one(viewer.queue.pop_front())
+	check(await Streaming.drain(viewer), "Background imports complete before deadline")
 	check(viewer.rejected.is_empty(), "Assets accepted")
 
 
@@ -50,7 +50,7 @@ func run_test() -> void:
 	check(viewer.catalog.has("test_entity"), "Picker selection loads the chosen realm")
 	check(not (viewer.presentation != null), "Generic world has no house floor plan")
 	check(viewer.presentation == null, "Generic world has no house-specific lights")
-	drain(viewer)
+	await drain(viewer)
 	check(viewer.loaded.size() == 1, "Default camera frames the authored entity")
 	var original_bounds: Dictionary = viewer.loaded_bounds.duplicate(true)
 	var original_path: String = viewer.realm_path
@@ -65,11 +65,11 @@ func run_test() -> void:
 	check(
 		viewer.world.get_child_count() == 0, "Previous instances removed before loading next world"
 	)
-	drain(viewer)
+	await drain(viewer)
 	check(viewer.loaded_bounds != original_bounds, "Edited geometry is visible")
 	var after_bounds: Dictionary = viewer.loaded_bounds.duplicate(true)
 	viewer.file_dialog.dir_selected.emit(output.path_join("after"))
-	drain(viewer)
+	await drain(viewer)
 	check(
 		(
 			viewer.realm_path == output.path_join("after/realm.json")
@@ -78,7 +78,7 @@ func run_test() -> void:
 		"Preview folder selection preserves the catalog and asset root"
 	)
 	viewer.reload_button.pressed.emit()
-	drain(viewer)
+	await drain(viewer)
 	check(
 		viewer.loaded_bounds == after_bounds and viewer.world.get_child_count() == 1,
 		"Reload does not duplicate entities"
@@ -93,11 +93,10 @@ func run_test() -> void:
 		viewer.open_realm(output.path_join("missing/realm.json")),
 		"Metadata can open before local asset is available"
 	)
-	while not viewer.queue.is_empty():
-		viewer.import_one(viewer.queue.pop_front())
+	check(await Streaming.drain(viewer), "Background imports complete before deadline")
 	check(viewer.rejected.get("test_entity") == "Asset missing", "Missing model identified")
 	check(viewer.open_realm(output.path_join("after/realm.json")), "Recover after a missing asset")
-	drain(viewer)
+	await drain(viewer)
 	check(viewer.rejected.is_empty(), "New selection clears old rejection state")
 	await process_frame
 	var report := {

@@ -210,6 +210,10 @@ Sparse hydration refreshes only matching payload stat entries, using a temporary
 index that is removed on success, failure, SIGINT or SIGTERM.
 
 The Godot adapter exposes `invoke`, `load_catalog` and `catalog_query`. The latter
-two retain an immutable core loading index per opened bundle. Blender build
+two retain an immutable core loading index per opened bundle. Queries carry
+`position`, three metre `radii`, mounted `loaded` IDs and optional `hysteresis`;
+responses contain streaming actions and tier/box visibility. The Godot binding uses
+`experimental-threads` so worker tasks can invoke the pure core concurrently;
+`load_catalog` remains a main-thread mutation. Blender build
 responses use explicit Z-up metre `bounds_blender_m`; both hosts use the core
 `blender::bounds_native` conversion.

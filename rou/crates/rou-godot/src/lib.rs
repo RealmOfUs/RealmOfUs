@@ -8,8 +8,8 @@ use serde_json::Value;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 struct RealmExtension;
-// SAFETY: Godot invokes this adapter on its main thread. It holds no engine
-// objects globally and passes only live PackedByteArray slices to the pure core.
+// SAFETY: Thread-enabled bindings protect instance borrows. This adapter holds no
+// engine objects globally and passes live byte slices to the reentrant pure core.
 #[gdextension]
 unsafe impl ExtensionLibrary for RealmExtension {}
 
@@ -43,7 +43,7 @@ impl Rou {
     }
 
     #[func]
-    fn catalog_query(&self, position: PackedByteArray) -> VarDictionary {
+    fn catalog_query(&self, request: PackedByteArray) -> VarDictionary {
         envelope(|| {
             let result = self
                 .catalog
@@ -51,7 +51,7 @@ impl Rou {
                 .ok_or_else(|| {
                     rou_core::Error::new("missing_catalog", "load a catalog before querying")
                 })?
-                .query(rou_core::json::parse(position.as_slice())?)?;
+                .query(&rou_core::json::parse(request.as_slice())?)?;
             Ok(serde_json::to_vec(&result)?)
         })
     }

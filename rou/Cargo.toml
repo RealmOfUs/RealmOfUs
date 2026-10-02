@@ -26,7 +26,7 @@ fs2 = "0.4"
 nix = { version = "0.29", features = ["signal", "process"] }
 clap = { version = "4", features = ["derive"] }
 cbindgen = "0.29"
-godot = { version = "=0.5.5", default-features = false, features = ["api-4-7"] }
+godot = { version = "=0.5.5", default-features = false, features = ["api-4-7", "experimental-threads"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

@@ -28,6 +28,14 @@ func run_checks() -> void:
 		"res://../../rou/crates/rou-core/tests/fixtures/spatial.json"
 	)
 	var vectors: Dictionary = Core.invoke("json.strict", bytes).value
+	var uncatalogued := Rou.new()
+	var absent := uncatalogued.catalog_query("{}".to_utf8_buffer())
+	check(not absent.ok and absent.error.code == "missing_catalog", "Query requires a catalog")
+	check(not Core.invoke("viewer.radii", [64, 16, 4000]).ok, "ABI rejects unordered radii")
+	check(
+		not Core.invoke("viewer.query", {"manifest": vectors.catalog, "position": [0, 0, 0]}).ok,
+		"ABI rejects a query without radii"
+	)
 	var canonical: String = Core.invoke("json.canonical", vectors.profile).value
 	check(
 		Core.invoke("digest.sha256", canonical.to_utf8_buffer()).value == vectors.profile_hash,

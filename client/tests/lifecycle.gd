@@ -1,5 +1,6 @@
 ## Native validation, camera choices, streaming residency and optional local sample routes.
 extends SceneTree
+const Streaming = preload("streaming.gd")
 const Core = preload("res://core.gd")
 var errors: Array[String] = []
 var checks := 0
@@ -34,8 +35,7 @@ func run_test() -> void:
 	viewer.navigate_position(Vector3(10000, 10000, 10000))
 	check(viewer.queue.is_empty() and viewer.cancellations > 0, "Obsolete queued imports cancelled")
 	viewer.world_ui.visit_entity()
-	while not viewer.queue.is_empty():
-		viewer.import_one(viewer.queue.pop_front())
+	check(await Streaming.drain(viewer), "Background imports complete before deadline")
 	check(not viewer.loaded.is_empty() and viewer.rejected.is_empty(), "Real models imported")
 	viewer.navigate_position(Vector3(10000, 10000, 10000))
 	check(viewer.loaded.is_empty() and viewer.unloads > 0, "Residency released")

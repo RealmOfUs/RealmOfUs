@@ -16,6 +16,8 @@ var version_details: Label
 var visible_ids: Array[String] = []
 var selection := ""
 var summary: Label
+var radius_inputs: Array[SpinBox] = []
+var settings_status: Label
 
 
 func setup(viewer: Node3D) -> void:
@@ -102,6 +104,22 @@ func setup(viewer: Node3D) -> void:
 	host.button("Visit entity", entities).pressed.connect(visit_entity)
 	version_details = host.label("No world open", 15, page("Version"))
 	version_details.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	var settings := page("Settings")
+	host.label("Viewing radii (metres)", 17, settings)
+	for index: int in 3:
+		host.label(["Near detail", "Middle detail", "Far boxes"][index], 15, settings)
+		var input := SpinBox.new()
+		input.min_value = .001
+		input.max_value = Core.config().viewer.max_radius
+		input.step = .001
+		input.allow_greater = true
+		input.value = host.radii[index]
+		settings.add_child(input)
+		radius_inputs.append(input)
+	host.button("Apply radii", settings).pressed.connect(apply_radii)
+	settings_status = host.label("Near <= middle <= far", 15, settings)
+	settings_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	host.label("Boxes: blue = available\nOrange = missing\nRed = failed validation", 15, settings)
 	var footer := VBoxContainer.new()
 	root.add_child(footer)
 	footer.position = Vector2(460, 985)
@@ -132,6 +150,21 @@ func setup(viewer: Node3D) -> void:
 	host.add_child(host.error_dialog)
 
 
+func sync_radii() -> void:
+	for index: int in radius_inputs.size():
+		radius_inputs[index].value = host.radii[index]
+
+
+func apply_radii() -> void:
+	var values: Array = []
+	for input: SpinBox in radius_inputs:
+		input.apply()
+		values.append(input.value)
+	settings_status.text = (
+		"Radii applied" if host.set_radii(values) else "Enter positive radii: near <= middle <= far"
+	)
+
+
 func page(title: String) -> VBoxContainer:
 	var box := VBoxContainer.new()
 	box.name = title
@@ -142,6 +175,7 @@ func page(title: String) -> VBoxContainer:
 
 func opened() -> void:
 	host.reload_button.disabled = false
+	sync_radii()
 	layer_input.min_value = host.layout.layers.min
 	layer_input.max_value = host.layout.layers.max
 	layer_input.value = 0
@@ -206,6 +240,8 @@ func select_entity(id: String) -> void:
 		"%s\n%s\n\nOwner chunk: %s\nRuntime: %.1f KiB"
 		% [entity.get("label", id), id, str(entity.owner_chunk), entity.asset.bytes / 1024.0]
 	)
+	if host.rejected.has(id):
+		entity_details.text += "\n\n" + str(host.rejected[id])
 
 
 func visit_entity() -> void:
@@ -231,6 +267,8 @@ func jump_to_chunk_input() -> void:
 func update() -> void:
 	if host.manifest.is_empty():
 		return
+	if not selection.is_empty():
+		select_entity(selection)
 	region_state.text = (
 		"%.1f, %.1f, %.1f m\n%s"
 		% [

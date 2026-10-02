@@ -15,7 +15,7 @@
 //! | `glb.precheck` | Complete GLB | [`glb::Report`] |
 //! | `glb.inspect` | Complete GLB | `{metrics, descriptor}` |
 //! | `lfs.pointer` | Pointer or payload bytes | Pointer [`Descriptor`], or `null` for a non-pointer |
-//! | `config` | Ignored; empty bytes allowed | ABI, default profile, host read budgets, format/path constants |
+//! | `config` | Ignored; empty bytes allowed | ABI, profile, viewer defaults and limits, host read budgets, format/path constants |
 //!
 //! # JSON request operations
 //!
@@ -49,11 +49,12 @@
 //! | `blender.relative_path` | `{source, reference}` | Safe relative path from [`blender::relative_path`] |
 //! | `world.diff` | `{before, after}`, either world may be null | Semantic change object from [`world::diff`] |
 //! | `session.fingerprint` | `{world, source}` | Baseline digest from [`world::session_fingerprint`] |
-//! | `viewer.catalog` / `viewer.start` | [`Manifest`] | Derived viewer catalog / default pose |
+//! | `viewer.catalog` / `viewer.start` | [`Manifest`] | Viewer layout including all impostor bounds / default overview pose |
+//! | `viewer.radii` | Three metre radii | Validated ordered near/middle/far radii |
 //! | `viewer.at` | `x,y,z` JSON string in metres | Three-component metre coordinates |
 //! | `viewer.aim` | `{position, look_at}` in metres | Pose with coincident-target fallback |
 //! | `viewer.pose` | [`super::viewer::Pose`] | Validated pose |
-//! | `viewer.query` | [`super::viewer::Query`] | Entities to load and current chunk information |
+//! | `viewer.query` | [`super::viewer::Query`] | Streaming actions, tier IDs and current chunk information |
 //! | `viewer.map` | [`super::viewer::MapRequest`] | In-world map grid layout |
 //! | `viewer.chunk` | `{profile, selector}`, a canonical single-chunk key | `{position, chunk}`, position is the center in metres |
 //! | `viewer.metres` | Three-integer millimetre coordinates | Three-component metre coordinates |
@@ -438,6 +439,7 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
         "viewer.at" => json!(crate::viewer::at(&json::parse::<String>(input)?)?),
         "viewer.aim" => serde_json::to_value(crate::viewer::aim(json::parse(input)?)?)?,
         "viewer.pose" => serde_json::to_value(crate::viewer::pose(json::parse(input)?)?)?,
+        "viewer.radii" => json!(crate::viewer::radii(json::parse(input)?)?),
         "viewer.query" => crate::viewer::query(&json::parse(input)?)?,
         "viewer.map" => crate::viewer::map(&json::parse(input)?)?,
         "viewer.chunk" => {
@@ -453,6 +455,11 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
         "config" => json!({
             "abi_version": formats::ABI_VERSION,
             "profile": Profile::default(),
+            "viewer": {
+                "radii": crate::viewer::default_radii(), "hysteresis": limits::VIEW_HYSTERESIS,
+                "max_radius": limits::VIEW_COORDINATE_METRES,
+                "max_retention": limits::VIEW_RETENTION_METRES
+            },
             "limits": {
                 "json_bytes": limits::JSON_BYTES,
                 "glb_bytes": limits::GLB_BYTES,

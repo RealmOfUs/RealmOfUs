@@ -1,5 +1,6 @@
 ## Validate actual generated GLBs and compare native Godot geometry with recorded bounds.
 extends SceneTree
+const Streaming = preload("streaming.gd")
 const Core = preload("res://core.gd")
 var errors: Array[String] = []
 var checks := 0
@@ -31,7 +32,8 @@ func run_checks() -> void:
 			check(false, "Manifest rejected: " + path)
 			continue
 		for entity: Dictionary in viewer.manifest.entities:
-			viewer.import_one(entity.id)
+			viewer.set_pose(viewer.layout.entities[entity.id].focus)
+			check(await Streaming.drain(viewer), "Background import completes")
 			check(viewer.loaded.has(entity.id), "GLB validated and imported: " + entity.id)
 			if not viewer.loaded_bounds.has(entity.id):
 				continue

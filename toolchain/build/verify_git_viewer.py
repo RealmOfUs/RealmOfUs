@@ -79,8 +79,10 @@ def verify(
                 process.kill()
                 process.wait()
                 raise
-    if returncode:
-        raise RuntimeError(f"Exported viewer exited {returncode}; inspect {output / 'runtime.log'}")
+    if returncode or "ERROR:" in (output / "runtime.log").read_text():
+        raise RuntimeError(
+            f"Exported viewer failed (exit {returncode}); inspect {output / 'runtime.log'}"
+        )
     report = json.loads(report_path.read_text())
     checks = {
         "fixed_commit": report["commit_oid"] == version["commit_oid"],

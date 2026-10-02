@@ -31,8 +31,16 @@ pub const IMAGE_DECODED_BYTES: u64 = 64 * 1024 * 1024;
 pub const COORDINATE_MM: i64 = 1_000_000_000;
 /// Maximum absolute camera coordinate in metres; allows a full world-diagonal height outside the world.
 pub const VIEW_COORDINATE_METRES: f64 = 4.0 * COORDINATE_MM as f64 / 1000.0;
-/// Maximum viewer loading distance to a chunk AABB, in metres.
-pub const VIEW_RADIUS_METRES: f64 = 48.0;
+/// Default near-detail distance to a chunk AABB, in metres.
+pub const VIEW_NEAR_METRES: f64 = 48.0;
+/// Default full-asset residency distance to a chunk AABB, in metres.
+pub const VIEW_MID_METRES: f64 = 200.0;
+/// Default metadata-impostor visibility distance to a chunk AABB, in metres.
+pub const VIEW_FAR_METRES: f64 = 4000.0;
+/// Default residency multiplier for already loaded assets at the middle boundary.
+pub const VIEW_HYSTERESIS: f64 = 1.15;
+/// Maximum middle-radius times hysteresis, in metres, independent of the default multiplier.
+pub const VIEW_RETENTION_METRES: f64 = 4_600_000.0;
 /// Maximum chunk edge length per axis, in millimetres; the minimum is 1 mm.
 pub const CHUNK_SIZE_MM: i64 = 64_000;
 /// Maximum chunk count in the finite world or a selection.

@@ -99,8 +99,8 @@ pub fn aim(mut request: Pose) -> Result<Pose> {
 /// Validate the catalog and place the default start one union-AABB diagonal above its center.
 ///
 /// Offset the camera along +Y and aim at the center. For an empty world, return
-/// `[0,2,0]` looking at the origin. Does not change the loading radius; a high overview
-/// may initially have no nearby assets.
+/// `[0,2,0]` looking at the origin. Does not change the viewing radii; a high overview
+/// can show catalog boxes without loading full assets.
 ///
 /// # Errors
 ///
@@ -188,7 +188,8 @@ pub fn chunk_center(profile: &Profile, chunk: Point) -> Result<Metres> {
 /// Derive viewer initialization JSON from a complete catalog.
 ///
 /// Return `known` (all world chunks, including empty ones), `entities` (metre positions,
-/// metre bounds and focus poses keyed by ID), and `start` (the default pose).
+/// metre bounds and focus poses keyed by ID), `start` (the default pose), and
+/// `impostors` (all entity world-bound centers and sizes in metres).
 /// Does not access GLBs or local recent positions.
 ///
 /// # Errors
@@ -218,29 +219,87 @@ pub fn catalog(manifest: &Manifest) -> Result<Value> {
     }).collect();
     Ok(json!({
         "known": known, "entities": entities, "start": default_pose(manifest)?,
-        "layers": {"min": p.min_chunk[1], "max": p.max_chunk[1] - 1}
+        "layers": {"min": p.min_chunk[1], "max": p.max_chunk[1] - 1},
+        "impostors": manifest.entities.iter().map(|entity| json!({
+            "id": entity.id,
+            "center_m": std::array::from_fn::<_, 3, _>(|a|
+                (entity.bounds_mm.min[a] + entity.bounds_mm.max[a]) as f64 / 2000.0),
+            "size_m": std::array::from_fn::<_, 3, _>(|a|
+                (entity.bounds_mm.max[a] - entity.bounds_mm.min[a]) as f64 / 1000.0)
+        })).collect::<Vec<_>>()
     }))
 }
-/// A streaming load-set query, fully validated by [`query`] after deserialization.
+/// Default near, middle and far radii, in metres; viewer settings, not profile data.
+pub fn default_radii() -> Metres {
+    [
+        limits::VIEW_NEAR_METRES,
+        limits::VIEW_MID_METRES,
+        limits::VIEW_FAR_METRES,
+    ]
+}
+/// Default multiplier applied only to already resident middle-detail assets.
+pub fn default_hysteresis() -> f64 {
+    limits::VIEW_HYSTERESIS
+}
+/// Validate positive, ordered, finite near/middle/far radii within the camera budget.
+///
+/// # Errors
+/// Return `invalid_radii` for invalid ranges; equal adjacent radii are allowed.
+pub fn radii(value: Metres) -> Result<Metres> {
+    require(
+        value
+            .iter()
+            .all(|v| v.is_finite() && *v > 0.0 && *v <= limits::VIEW_COORDINATE_METRES)
+            && value[0] <= value[1]
+            && value[1] <= value[2],
+        "invalid_radii",
+        "radii must be positive ordered near,middle,far distances in metres",
+    )?;
+    Ok(value)
+}
+/// A query against an already validated catalog; no filesystem availability is implied.
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Residency {
+    /// Current camera position in metres, including outside-world overview positions.
+    pub position: Metres,
+    /// Near, middle and far distances to occupied chunk AABBs, in metres.
+    pub radii: Metres,
+    /// IDs actually mounted by the host, not queued or in-flight entities.
+    #[serde(default)]
+    pub loaded: Vec<String>,
+    /// Middle-radius multiplier, at least one; the product must fit `VIEW_RETENTION_METRES`.
+    #[serde(default = "default_hysteresis")]
+    pub hysteresis: f64,
+}
+/// A one-shot streaming query including a complete catalog.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Query {
     /// Complete metadata catalog, which may reference assets not yet materialized.
     pub manifest: Manifest,
-    /// Current camera position in metres; may lie outside the world.
+    /// Current camera position in metres.
     pub position: Metres,
+    /// Positive ordered near, middle and far radii in metres.
+    pub radii: Metres,
+    /// IDs actually mounted by the host.
+    #[serde(default)]
+    pub loaded: Vec<String>,
+    /// Middle-radius multiplier; the product must fit `VIEW_RETENTION_METRES`.
+    #[serde(default = "default_hysteresis")]
+    pub hysteresis: f64,
 }
-/// Select entities in occupied chunks within 48 m of the camera, then deduplicate and sort.
-///
-/// Measure distance to chunk AABBs. Sort entities by world AABB center distance to
-/// the camera, breaking ties by ID. Return `entity_ids`, `selected_chunks` (the number
-/// of occupied chunks hit), `chunk` and `chunk_key`.
+/// Validate a catalog and select streaming actions using [`Catalog::query`].
 ///
 /// # Errors
-///
-/// Return errors for invalid catalogs or camera coordinates; does not check actual asset availability.
+/// Propagate catalog, coordinate, radii, hysteresis and loaded-ID validation errors.
 pub fn query(request: &Query) -> Result<Value> {
-    Catalog::new(&request.manifest)?.query(request.position)
+    Catalog::new(&request.manifest)?.query(&Residency {
+        position: request.position,
+        radii: request.radii,
+        loaded: request.loaded.clone(),
+        hysteresis: request.hysteresis,
+    })
 }
 
 /// An immutable validated loading index, reusable for successive camera queries.
@@ -279,14 +338,45 @@ impl Catalog {
                 .collect(),
         })
     }
-    /// Query the loading set with the same ordering and radius as [`query`].
+    /// Return disjoint `load`, `keep` and `unload` sets, and near/mid/far tier IDs.
+    ///
+    /// Distance is the minimum squared distance to any occupied chunk of an entity.
+    /// Boundaries are inclusive; middle retention multiplies the radius by hysteresis
+    /// and may extend beyond the far-box radius. Equal adjacent radii are allowed;
+    /// the nearer tier wins a shared boundary. Duplicate loaded IDs are deduplicated.
+    /// All arrays are ordered by entity AABB-center distance, with ID breaking ties.
+    /// `impostor_hidden` equals `keep`; `impostor_visible` covers unmounted entities
+    /// within the far radius (including IDs in `unload`). Hosts hide a loading impostor
+    /// only after mounting the corresponding scene. `selected_chunks` counts occupied
+    /// chunks within the middle radius. Missing GLBs still appear in `load`.
     ///
     /// # Errors
-    /// Return coordinate errors for nonfinite or over-budget camera positions.
-    pub fn query(&self, position: Metres) -> Result<Value> {
+    /// Return errors for invalid coordinates/radii, a nonfinite or subunit hysteresis,
+    /// an over-budget retention distance, or loaded IDs absent from this catalog.
+    pub fn query(&self, request: &Residency) -> Result<Value> {
+        let position = request.position;
         let current = chunk_at(&self.profile, position)?;
+        let radii = radii(request.radii)?;
+        let retention = radii[1] * request.hysteresis;
+        require(
+            request.hysteresis.is_finite()
+                && request.hysteresis >= 1.0
+                && retention <= limits::VIEW_RETENTION_METRES,
+            "invalid_hysteresis",
+            "hysteresis must be finite, at least one and within the distance budget",
+        )?;
+        require(
+            request.loaded.len() <= limits::WORLD_RECORDS
+                && request
+                    .loaded
+                    .iter()
+                    .all(|id| self.centers.contains_key(id)),
+            "invalid_loaded",
+            "loaded IDs must belong to the catalog and fit its budget",
+        )?;
+        let loaded: BTreeSet<_> = request.loaded.iter().collect();
         let p = &self.profile;
-        let mut wanted = BTreeSet::new();
+        let mut distances: BTreeMap<&String, f64> = BTreeMap::new();
         let mut selected = 0;
         for (chunk, ids) in &self.chunks {
             let lower: Metres = std::array::from_fn(|a| {
@@ -299,21 +389,52 @@ impl Catalog {
                     (position[a] - nearest).powi(2)
                 })
                 .sum::<f64>();
-            if distance <= limits::VIEW_RADIUS_METRES.powi(2) {
+            if distance <= radii[1].powi(2) {
                 selected += 1;
-                wanted.extend(ids.iter().cloned());
+            }
+            for id in ids {
+                distances
+                    .entry(id)
+                    .and_modify(|d| *d = d.min(distance))
+                    .or_insert(distance);
             }
         }
-        let mut wanted: Vec<_> = wanted.into_iter().collect();
+        let mut ordered: Vec<_> = self.centers.keys().collect();
         let distance = |id: &String| {
             (0..3)
                 .map(|a| (self.centers[id][a] - position[a]).powi(2))
                 .sum::<f64>()
         };
-        wanted.sort_by(|a, b| distance(a).total_cmp(&distance(b)).then_with(|| a.cmp(b)));
+        ordered.sort_by(|a, b| distance(a).total_cmp(&distance(b)).then_with(|| a.cmp(b)));
+        let (mut load, mut keep, mut unload) = (Vec::new(), Vec::new(), Vec::new());
+        let (mut near, mut mid, mut far) = (Vec::new(), Vec::new(), Vec::new());
+        let mut visible = Vec::new();
+        for id in ordered {
+            let d = distances[id];
+            let retained = loaded.contains(id) && d <= retention.powi(2);
+            if retained {
+                keep.push(id);
+            } else if loaded.contains(id) {
+                unload.push(id);
+            } else if d <= radii[1].powi(2) {
+                load.push(id);
+            }
+            if d <= radii[0].powi(2) {
+                near.push(id);
+            } else if d <= radii[1].powi(2) || retained {
+                mid.push(id);
+            } else if d <= radii[2].powi(2) {
+                far.push(id);
+            }
+            if !retained && d <= radii[2].powi(2) {
+                visible.push(id);
+            }
+        }
         Ok(json!({
-            "entity_ids": wanted, "selected_chunks": selected,
-            "chunk": current, "chunk_key": chunk_key(current)
+            "load": load, "keep": keep, "unload": unload,
+            "impostor_hidden": keep, "impostor_visible": visible,
+            "tiers": {"near": near, "mid": mid, "far": far},
+            "selected_chunks": selected, "chunk": current, "chunk_key": chunk_key(current)
         }))
     }
 }
