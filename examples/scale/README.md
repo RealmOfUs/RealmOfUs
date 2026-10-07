@@ -15,7 +15,9 @@ python3 examples/scale/make_bundle.py --count 800 --seed 20260922
 
 The generator uses Python and the core's `preview.create` and `viewer.catalog`
 operations. It places 800 entities across the default world's X/Z chunks, sharing
-three verified GLBs from the calibration preview (axis probe, house, tree). It
+three verified GLBs from the calibration preview (axis probe, house, tree). Each
+entity carries both full and lod1 descriptors; these small meshes have identical
+bytes in both roles, so the three assets remain shared. It
 creates a complete catalog and no `version.json`; no Blender invocation is needed
 by the generator itself. Positions are deterministic but can overlap. This sample
 measures repeated instances and streaming, not a city with 800 unique assets.
@@ -36,3 +38,36 @@ python3 toolchain/build/benchmark_viewer.py \
 
 Omit `--activate` on platforms other than macOS. Neither the seed nor the radii
 change the browse-bundle format; radius defaults remain viewer settings.
+
+## Detailed furniture sample
+
+After `make all`, generate a separate Git realm with both detail assets:
+
+```sh
+python3 examples/scale/make_detailed_realm.py
+python3 toolchain/build/benchmark_viewer.py \
+  --realm build/scale/detailed/.rou/view/worktree/realm.json \
+  --seconds 30 --flight --balanced --activate \
+  --report /tmp/rou-m3-detailed.json --json
+```
+
+The output directory must be empty; use `--output` for another location. The script
+downloads the CC0 Poly Haven `ArmChair_01`, `WoodenChair_01` and `wool_boucle` 4K
+assets, verifies their provider checksums and records source URLs and SHA-256 hashes.
+Downloads are cached under `.cache/walsh-offline/`. Missing downloads fail the run.
+The provider's 4K wool images are rectangular (4096 by 5076 pixels); the sample
+preserves them in full detail and emits the corresponding image-dimension reference
+warning. LOD images are resized proportionally to a maximum 1024-pixel edge.
+
+The two scanned furniture models use SIMPLE subdivision to increase tessellation
+without claiming additional scanned detail. A third, original woven panel has
+procedural geometry and the wool textures. The generator saves packed Blender
+sources, runs `rou build`, `rou add .`, `rou validate --staged` and
+`rou view --worktree --all`, checks the browse bundle, verifies source files stayed
+unchanged and requires substantial lod1 triangle and texture reduction. It creates no commit.
+Commands and metrics are retained under the generated realm's `.rou/` directory,
+including `detailed-report.json`.
+
+LOD decimates geometry and resamples oversized textures on copies. This three-model
+sample measures large individual assets and tier replacement; the 800-entity
+sample measures shared instances. Neither establishes a city-scale budget.

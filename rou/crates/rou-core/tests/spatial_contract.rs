@@ -1,4 +1,4 @@
-//! Reviewed expected results copied from the 2.0 fixture; only catalog.entries was removed.
+//! Reviewed spatial vectors remain unchanged; the harness supplies current asset fields.
 use rou_core::{
     documents::Manifest,
     json, ops,
@@ -7,7 +7,34 @@ use rou_core::{
 use serde_json::{Value, json as value};
 
 fn fixtures() -> Value {
-    json::strict(include_bytes!("fixtures/spatial.json")).unwrap()
+    let mut fixture = json::strict(include_bytes!("fixtures/spatial.json")).unwrap();
+    fn adapt(value: &mut Value) {
+        match value {
+            Value::Object(map) => {
+                if map.get("format") == Some(&value!("rou-preview/0.1")) {
+                    map.insert("format".into(), value!(rou_core::formats::PREVIEW));
+                }
+                if let Some(asset) = map
+                    .get("asset")
+                    .filter(|asset| asset.get("path").is_some())
+                    .cloned()
+                {
+                    map.insert("lod1".into(), asset);
+                }
+                for child in map.values_mut() {
+                    adapt(child);
+                }
+            }
+            Value::Array(items) => {
+                for child in items {
+                    adapt(child);
+                }
+            }
+            _ => {}
+        }
+    }
+    adapt(&mut fixture);
+    fixture
 }
 fn changed(base: &Value, case: &Value, field: &str) -> Value {
     let mut value = base.clone();

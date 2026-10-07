@@ -26,7 +26,9 @@ func _ready() -> void:
 	host = get_parent()
 	camera = host.camera
 	var path: String = host.options.get("sample-data", "res://samples/villa_anahid.json")
-	var bytes: Dictionary = host.LocalCatalog.read_bytes(path, Core.config().limits.json_bytes)
+	var bytes: Dictionary = host.LocalCatalog.read_bytes(
+		path, Core.config().limits.safety.json_bytes
+	)
 	if bytes.has("error"):
 		host.fail(bytes.error)
 		return

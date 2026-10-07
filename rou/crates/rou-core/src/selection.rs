@@ -39,7 +39,7 @@ pub struct Resolved {
     pub directories: Vec<String>,
     /// Selected model source files and declared dependencies, excluding runtime GLBs.
     pub paths: Vec<String>,
-    /// The selected models' `runtime/<model>.glb` paths.
+    /// The selected models' full and middle-detail runtime GLB paths.
     pub assets: Vec<String>,
     /// The union of explicit entity IDs, chunk hits or all entities.
     pub entity_ids: Vec<String>,
@@ -112,6 +112,7 @@ impl Selection {
             let model = &world.models[&entity.model];
             inputs.extend(model.input_paths());
             assets.insert(paths::asset(&model.id));
+            assets.insert(paths::lod1(&model.id));
         }
         let mut directories: BTreeSet<String> =
             paths::BASE_CONE.iter().map(|p| (*p).into()).collect();

@@ -21,14 +21,24 @@ impl Fixture {
         let root = temp.path().join("realm");
         fs::create_dir(&root).unwrap();
         let blender = temp.path().join("exporter.py");
-        let (document, binary) = common::triangle();
-        fs::write(
-            temp.path().join("triangle.glb"),
-            common::glb(&document, &binary),
-        )
-        .unwrap();
+        for (file, metrics, (document, binary)) in [
+            ("triangle.glb", "metrics.json", common::triangle()),
+            (
+                "triangle-lod1.glb",
+                "lod1-metrics.json",
+                common::triangle_lod1(),
+            ),
+        ] {
+            let bytes = common::glb(&document, &binary);
+            fs::write(temp.path().join(file), &bytes).unwrap();
+            fs::write(
+                temp.path().join(metrics),
+                serde_json::to_vec(&rou_core::glb::precheck(&bytes).unwrap()).unwrap(),
+            )
+            .unwrap();
+        }
         fs::write(&blender,r#"#!/usr/bin/env python3
-import json,sys,pathlib
+import json,sys,pathlib,hashlib
 request=pathlib.Path(sys.argv[sys.argv.index('--request')+1])
 r=json.loads(request.read_text())
 outputs=[]
@@ -36,7 +46,16 @@ for model in r['models']:
     output=pathlib.Path(r['output_dir'])/model['asset_path']
     output.parent.mkdir(parents=True,exist_ok=True)
     output.write_bytes(pathlib.Path(__file__).with_name('triangle.glb').read_bytes())
-    outputs.append(dict(id=model['id'],path=model['asset_path'],bounds_blender_m=[[0,0,0],[1,1,1]],dependencies=['sources/shared/wood.png']))
+    data=output.read_bytes()
+    lod1=pathlib.Path(r['output_dir'])/model['lod1_path']
+    lod1_data=pathlib.Path(__file__).with_name('triangle-lod1.glb').read_bytes()
+    lod1.write_bytes(lod1_data)
+    descriptor=dict(sha256=hashlib.sha256(data).hexdigest(),bytes=len(data))
+    lod1_descriptor=dict(sha256=hashlib.sha256(lod1_data).hexdigest(),bytes=len(lod1_data))
+    metrics=json.loads(pathlib.Path(__file__).with_name('metrics.json').read_text())
+    metrics['bytes']=len(data)
+    lod1_metrics=json.loads(pathlib.Path(__file__).with_name('lod1-metrics.json').read_text())
+    outputs.append(dict(id=model['id'],asset=dict(path=model['asset_path'],**descriptor),lod1=dict(path=model['lod1_path'],**lod1_descriptor),metrics=dict(asset=metrics,lod1=lod1_metrics),bounds_blender_m=[[0,0,0],[1,1,1]],dependencies=['sources/shared/wood.png']))
 report=dict(format=r['response_format'],models=outputs,tool_versions=dict(exporter=r['response_format'],blender='test double'))
 pathlib.Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps(report))
 "#).unwrap();
@@ -427,7 +446,7 @@ fn unselected_record_deletion_is_rejected_before_fetch_or_export() {
     let selected = f.rou(&clone, &["sparse", "set", "--chunk", "0,0,-1"]);
     assert_eq!(
         selected["resolution"]["assets"],
-        value!(["runtime/house.glb"])
+        value!(["runtime/house.glb", "runtime/house.lod1.glb"])
     );
     let record = clone.join("runtime/bench.json");
     let bytes = fs::read(&record).unwrap();
@@ -701,7 +720,11 @@ fn grouped_build_prunes_successful_runs_and_retired_outputs() {
     let result = f.rou(&f.root, &["build"]);
     assert_eq!(
         result["removed"],
-        value!(["runtime/bench.glb", "runtime/bench.json"])
+        value!([
+            "runtime/bench.glb",
+            "runtime/bench.json",
+            "runtime/bench.lod1.glb"
+        ])
     );
 }
 
@@ -1364,7 +1387,7 @@ fn browse_selection_is_offline_by_default_and_explicit_selectors_fetch_only_asse
     assert_eq!(selected["downloaded_entities"], value!(["house"]));
     let trace = fs::read_to_string(trace).unwrap();
     assert!(!trace.contains("git-lfs smudge") && !trace.contains("git-lfs fetch"));
-    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 1);
+    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 2);
     let catalog: Manifest = json::parse(&fs::read(bundle.join("realm.json")).unwrap()).unwrap();
     assert_eq!(catalog.entities.len(), 2);
     let house = catalog
@@ -1372,12 +1395,24 @@ fn browse_selection_is_offline_by_default_and_explicit_selectors_fetch_only_asse
         .iter()
         .find(|entity| entity.id == "house")
         .unwrap();
+    assert_ne!(house.asset.sha256, house.lod1.sha256);
+    for asset in [&house.asset, &house.lod1] {
+        let bytes = fs::read(bundle.join(&asset.path)).unwrap();
+        asset.descriptor().verify(&bytes).unwrap();
+        rou_core::glb::precheck(&bytes).unwrap();
+    }
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
         assert_eq!(
             fs::metadata(bundle.join(&house.asset.path)).unwrap().ino(),
             fs::metadata(clone.join("runtime/house.glb")).unwrap().ino()
+        );
+        assert_eq!(
+            fs::metadata(bundle.join(&house.lod1.path)).unwrap().ino(),
+            fs::metadata(clone.join("runtime/house.lod1.glb"))
+                .unwrap()
+                .ino()
         );
     }
     assert!(
@@ -1388,10 +1423,11 @@ fn browse_selection_is_offline_by_default_and_explicit_selectors_fetch_only_asse
     let chunk = f.rou(&clone, &["view", "--chunk", "1,0,-1..1,0,0"]);
     assert_eq!(chunk["downloaded_entities"], value!(["bench"]));
     assert!(!clone.join("sources/bench").exists());
-    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 1);
+    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 2);
     let all = f.rou(&clone, &["view", "--all"]);
     assert_eq!(all["downloaded_entities"], value!(["bench", "house"]));
-    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 2);
+    // The two models have different full assets and share a third, distinct lod1 asset.
+    assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 3);
     let draft = f.rou(&clone, &["view", "--worktree"]);
     assert_eq!(draft["downloaded_entities"], value!(["house"]));
     assert_eq!(draft["version"]["commit_oid"], "");
@@ -1419,6 +1455,11 @@ fn browse_selection_is_offline_by_default_and_explicit_selectors_fetch_only_asse
     );
     // Editing the worktree's runtime bytes must not leak into a fixed revision.
     fs::write(clone.join("runtime/house.glb"), b"changed worktree asset").unwrap();
+    fs::write(
+        clone.join("runtime/house.lod1.glb"),
+        b"changed worktree lod1",
+    )
+    .unwrap();
     let fixed = f.rou(&clone, &["view", "--entity", "house"]);
     let fixed: Manifest =
         json::parse(&fs::read(fixed["manifest"].as_str().unwrap()).unwrap()).unwrap();
@@ -1427,9 +1468,78 @@ fn browse_selection_is_offline_by_default_and_explicit_selectors_fetch_only_asse
         .iter()
         .find(|entity| entity.id == "house")
         .unwrap();
-    house
-        .asset
-        .descriptor()
-        .verify(&fs::read(bundle.join(&house.asset.path)).unwrap())
-        .unwrap();
+    for asset in [&house.asset, &house.lod1] {
+        asset
+            .descriptor()
+            .verify(&fs::read(bundle.join(&asset.path)).unwrap())
+            .unwrap();
+    }
+}
+
+#[test]
+fn dual_assets_are_validated_and_large_builds_warn_without_rejection() {
+    let f = Fixture::new();
+    let (mut document, _) = common::triangle();
+    let vertices = 600_000;
+    let binary = vec![0; vertices * 12];
+    document["buffers"][0]["byteLength"] = value!(binary.len());
+    document["bufferViews"][0]["byteLength"] = value!(binary.len());
+    document["accessors"][0]["count"] = value!(vertices);
+    let bytes = common::glb(&document, &binary);
+    fs::write(f._temp.path().join("triangle.glb"), &bytes).unwrap();
+    fs::write(
+        f._temp.path().join("metrics.json"),
+        serde_json::to_vec(&rou_core::glb::precheck(&bytes).unwrap()).unwrap(),
+    )
+    .unwrap();
+    f.seed();
+    f.write("sources/house/house.blend", b"updated full source");
+    let built = f.rou(&f.root, &["build"]);
+    assert_eq!(built["metrics"]["house"]["asset"]["vertices"], vertices);
+    assert!(
+        built["warnings"]["house"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|v| v.as_str().unwrap().contains("vertices"))
+    );
+    let record: Build = json::parse(&fs::read(f.root.join("runtime/house.json")).unwrap()).unwrap();
+    for asset in [&record.asset, &record.lod1] {
+        asset
+            .descriptor()
+            .verify(&fs::read(f.root.join(&asset.path)).unwrap())
+            .unwrap();
+    }
+    f.write("sources/house/house.blend", b"another full source");
+    let human = f.raw(&f.root, &["build"]);
+    assert!(human.status.success());
+    let output = String::from_utf8(human.stdout).unwrap();
+    assert!(output.contains("600000 vertices") && output.contains("warning: house: asset:"));
+    f.rou(&f.root, &["add", "."]);
+    let validation = f.rou(&f.root, &["validate", "--staged"]);
+    assert!(validation.get("warnings").is_none());
+    f.write("runtime/house.lod1.glb", b"tampered simplified asset");
+    f.rou(&f.root, &["add", "runtime/house.lod1.glb"]);
+    let invalid = f.raw(&f.root, &["validate", "--staged"]);
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("house.lod1.glb"));
+}
+
+#[test]
+fn build_rejects_oversized_output_descriptors_before_publication() {
+    let f = Fixture::new();
+    f.seed();
+    let previous = fs::read(f.root.join("runtime/house.json")).unwrap();
+    let exporter = fs::read_to_string(&f.blender)
+        .unwrap()
+        .replace("bytes=len(data)", "bytes=300*1024*1024");
+    fs::write(&f.blender, exporter).unwrap();
+    f.write("sources/house/house.blend", b"changed");
+    let invalid = f.raw(&f.root, &["build"]);
+    assert!(!invalid.status.success());
+    assert!(String::from_utf8_lossy(&invalid.stderr).contains("GLB_BYTES"));
+    assert_eq!(
+        previous,
+        fs::read(f.root.join("runtime/house.json")).unwrap()
+    );
 }

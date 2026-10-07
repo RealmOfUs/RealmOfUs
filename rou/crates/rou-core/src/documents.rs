@@ -352,7 +352,7 @@ document!(
     ///
     /// Build/Manifest semantics define the exact path shape; this type only checks generic path safety and budgets.
     Asset {
-        /// `runtime/<model>.glb` in builds, or `objects/<sha256>.glb` in browse bundles.
+        /// `runtime/<model>.glb` or `runtime/<model>.lod1.glb` in builds, or `objects/<sha256>.glb` in browse bundles.
         path: String,
         /// The SHA-256 of raw GLB bytes, not a canonical JSON digest.
         sha256: String,
@@ -371,9 +371,14 @@ impl Asset {
         paths::safe(&self.path)?;
         hash_shape(&self.sha256)?;
         require(
-            (20..=limits::GLB_BYTES as u64).contains(&self.bytes),
+            self.bytes >= 20,
             "asset_budget",
-            "GLB byte budget exceeded",
+            "GLB size below minimum (20 bytes)",
+        )?;
+        require(
+            self.bytes <= limits::GLB_BYTES as u64,
+            "asset_budget",
+            "GLB safety limit exceeded: GLB_BYTES (256 MiB)",
         )
     }
     /// Extract the asset digest and byte count, dropping the path without revalidating.
@@ -406,6 +411,8 @@ document!(
         input_digest: String,
         /// Output GLB, with path exactly `runtime/<model>.glb`.
         asset: Asset,
+        /// Simplified GLB, with path exactly `runtime/<model>.lod1.glb`.
+        lod1: Asset,
         /// GLB-local Y-up millimetre AABB; entity translation produces the world AABB.
         local_bounds_mm: Bounds,
         /// Optional tool-version information, excluded from the input digest; cannot be `null` when present.
@@ -442,6 +449,12 @@ impl Build {
             self.asset.path == paths::asset(&self.model),
             "unsafe_path",
             "runtime path must match model ID",
+        )?;
+        self.lod1.validate_shape()?;
+        require(
+            self.lod1.path == paths::lod1(&self.model),
+            "unsafe_path",
+            "lod1 path must match model ID",
         )?;
         self.local_bounds_mm.validate()
     }
@@ -519,8 +532,10 @@ document!(
         offset_mm: [i64; 3],
         /// Translated world millimetre AABB with positive thickness on every axis.
         bounds_mm: Bounds,
-        /// GLB reference; Manifest requires a content-addressed path.
+        /// Full GLB reference; Manifest requires a content-addressed path.
         asset: Asset,
+        /// Middle-detail GLB reference, required even when identical to the full asset.
+        lod1: Asset,
     }
 );
 impl PreviewEntity {
@@ -533,6 +548,7 @@ impl PreviewEntity {
         paths::identity(&self.id)?;
         label(&self.label)?;
         self.asset.validate_shape()?;
+        self.lod1.validate_shape()?;
         self.bounds_mm.validate()
     }
 }
@@ -617,17 +633,19 @@ impl Manifest {
                 "invalid_placement",
                 "noncanonical owner or offset",
             )?;
-            require(
-                entity.asset.path == paths::object(&entity.asset.sha256),
-                "unsafe_path",
-                "invalid content-addressed asset path",
-            )?;
-            if let Some(previous) = assets.insert(&entity.asset.sha256, entity.asset.bytes) {
+            for asset in [&entity.asset, &entity.lod1] {
                 require(
-                    previous == entity.asset.bytes,
-                    "length_mismatch",
-                    "shared asset length mismatch",
+                    asset.path == paths::object(&asset.sha256),
+                    "unsafe_path",
+                    "invalid content-addressed asset path",
                 )?;
+                if let Some(previous) = assets.insert(&asset.sha256, asset.bytes) {
+                    require(
+                        previous == asset.bytes,
+                        "length_mismatch",
+                        "shared asset length mismatch",
+                    )?;
+                }
             }
         }
         require(
@@ -726,14 +744,28 @@ document!(
     ExportedModel {
         /// Exported model ID.
         id: String,
-        /// Expected relative GLB path, exactly `runtime/<id>.glb`.
-        path: String,
+        /// Full exported asset with a model-specific runtime path.
+        asset: Asset,
+        /// Simplified exported asset with a model-specific runtime path.
+        lod1: Asset,
+        /// Core-inspected statistics for the full and simplified assets.
+        metrics: ExportMetrics,
         /// Exported local Blender Z-up metre `[min, max]`; degenerate axes are allowed and later conservatively expanded to a millimetre AABB.
         bounds_blender_m: [[f64; 3]; 2],
         /// Helper-discovered dependency paths, all relative to the Realm root.
         dependencies: Vec<String>,
     }
 );
+/// Statistics supplied by the export helper and verified again against output bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportMetrics {
+    /// Statistics for the full GLB.
+    pub asset: crate::glb::Report,
+    /// Statistics for the middle-detail GLB.
+    pub lod1: crate::glb::Report,
+}
+
 impl ExportedModel {
     /// Check model ID, output path, finite non-reversed metre bounds and dependency-path budgets.
     ///
@@ -744,8 +776,10 @@ impl ExportedModel {
     /// file existence, GLB contents or dependency-list agreement with the request.
     pub fn validate_shape(&self) -> Result<()> {
         paths::identity(&self.id)?;
+        self.asset.validate_shape()?;
+        self.lod1.validate_shape()?;
         require(
-            self.path == paths::asset(&self.id),
+            self.asset.path == paths::asset(&self.id) && self.lod1.path == paths::lod1(&self.id),
             "unsafe_path",
             "export path must match model ID",
         )?;

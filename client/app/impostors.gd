@@ -68,3 +68,10 @@ func reject(id: String, error: String, code: String) -> void:
 		multimesh.set_instance_color(
 			instances[id].index, MISSING if code == Loader.MISSING_ASSET else INVALID
 		)
+
+
+func clear_error(id: String) -> void:
+	if instances.has(id):
+		instances[id].error = ""
+		instances[id].erase("error_code")
+		multimesh.set_instance_color(instances[id].index, AVAILABLE)

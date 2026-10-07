@@ -90,6 +90,7 @@ impl Repository {
             .flat_map(|id| {
                 [
                     BString::from(paths::asset(id)),
+                    BString::from(paths::lod1(id)),
                     BString::from(paths::build(id)),
                 ]
             })
@@ -114,6 +115,7 @@ impl Repository {
                             .and_then(|b| Ok(json::parse::<Build>(&b)?))
                         {
                             previous.insert((record.asset.sha256, record.asset.bytes));
+                            previous.insert((record.lod1.sha256, record.lod1.bytes));
                         }
                     }
                 }
@@ -121,8 +123,10 @@ impl Repository {
         }
         let mut validated_assets = Vec::new();
         let mut missing_assets = Vec::new();
-        for record in records.values() {
-            let asset = &record.asset;
+        for asset in records
+            .values()
+            .flat_map(|record| [&record.asset, &record.lod1])
+        {
             let descriptor = asset.descriptor();
             if snapshot.mode != Mode::Worktree {
                 let pointer =

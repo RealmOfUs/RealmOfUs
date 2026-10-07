@@ -89,7 +89,7 @@ def verify(
         "view_root": report["view_root_sha256"] == version["view_root_sha256"],
         "local_bridge": report["view_validation"] == "local-trusted",
         "models_loaded": report["imports"] > 0 and bool(report["loaded_bounds"]),
-        "assets_valid": not report["rejected"],
+        "assets_valid": not report["rejected"] and not report.get("asset_failures"),
         "real_frames": report["frames"] > 10 and report["first_presented_seconds"] >= 0,
         "screenshot": screenshot.is_file() and screenshot.stat().st_size > 10000,
         "empty_authoring_path": True,

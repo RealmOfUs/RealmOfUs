@@ -1,6 +1,6 @@
 # Spatial profile and browse bundle
 
-Version 2.1. This document defines the **spatial profile** shared by every realm and the **browse bundle** produced by `rou view` or the Blender add-on's local export and consumed by the Godot viewer (`rou-preview/0.1` and `rou-git-view/0.1`). The spatial rules have been frozen since 2026-09-09; the identifier `bounded-cartesian-v1-experiment` and its integer parameters stay as they are, the `experiment` suffix being historical naming only. Repository layout, models, entities, build records and Git semantics are in [repository.md](repository.md). This document defines no S2 signatures, public keys, network authentication or P2P; assets are not encrypted; a local SHA-256 check is not author authentication.
+Version 2.1. This document defines the **spatial profile** shared by every realm and the **browse bundle** produced by `rou view` or the Blender add-on's local export and consumed by the Godot viewer (`rou-preview/0.2` and `rou-git-view/0.1`). The spatial rules have been frozen since 2026-09-09; the identifier `bounded-cartesian-v1-experiment` and its integer parameters stay as they are, the `experiment` suffix being historical naming only. Repository layout, models, entities, build records and Git semantics are in [repository.md](repository.md). This document defines no S2 signatures, public keys, network authentication or P2P; assets are not encrypted; a local SHA-256 check is not author authentication.
 
 ## 1. Spatial conventions
 
@@ -38,7 +38,7 @@ A bundle contains exactly the three entries below. An ordinary `.DS_Store` file 
 
 | Path | Format | Contents |
 | --- | --- | --- |
-| `realm.json` | `rou-preview/0.1` | Runtime catalog: profile and hash, world position, bounds and asset description of every entity, complete chunk index |
+| `realm.json` | `rou-preview/0.2` | Runtime catalog: profile and hash, world position, bounds and asset description of every entity, complete chunk index |
 | `version.json` | `rou-git-view/0.1` | Fixed-revision sidecar: realm ID, Git object algorithm and commit, view root hash, catalog byte hash, validation level |
 | `objects/<sha256>.glb` | glTF 2.0 binary | Immutable viewing assets named after the SHA-256 of their actual bytes |
 
@@ -46,7 +46,7 @@ A bundle contains exactly the three entries below. An ordinary `.DS_Store` file 
 
 ```json
 {
-  "format": "rou-preview/0.1",
+  "format": "rou-preview/0.2",
   "profile": {"id": "bounded-cartesian-v1-experiment", "units": "meter", "up": "Y", "handedness": "right",
               "placement_unit_mm": 1, "origin_mm": [0, 0, 0], "chunk_size_mm": [32000, 32000, 32000],
               "min_chunk": [-4, -2, -4], "max_chunk": [4, 2, 4]},
@@ -61,13 +61,14 @@ A bundle contains exactly the three entries below. An ordinary `.DS_Store` file 
       "owner_chunk": [0, 0, 0],
       "offset_mm": [8000, 0, 8000],
       "bounds_mm": {"min": [3500, 0, 4500], "max": [12500, 4400, 11500]},
-      "asset": {"path": "objects/ce42…2ec7.glb", "sha256": "ce42…2ec7", "bytes": 5620}
+      "asset": {"path": "objects/ce42…2ec7.glb", "sha256": "ce42…2ec7", "bytes": 5620},
+      "lod1": {"path": "objects/ce42…2ec7.glb", "sha256": "ce42…2ec7", "bytes": 5620}
     }
   ]
 }
 ```
 
-The bundle contains no viewing entry points. `asset.path` is fixed to `objects/<sha256>.glb`, `sha256` equals the file name and `bytes` is the actual length. A GLB stores model-local coordinates and `position_mm` supplies the world translation; Blender sources are Z-up and map to Godot as `(x, z, -y)`, converted once at export.
+The bundle contains no viewing entry points. Both `asset` and `lod1` are mandatory. Each `path` is fixed to `objects/<sha256>.glb`, `sha256` equals the file name and `bytes` is the actual length. A GLB stores model-local coordinates and `position_mm` supplies the world translation; Blender sources are Z-up and map to Godot as `(x, z, -y)`, converted once at export.
 
 `version.json` is written by `rou view`:
 
@@ -87,22 +88,31 @@ The bundle contains no viewing entry points. `asset.path` is fixed to `objects/<
 
 The viewer performs every check through the Rust extension: catalog shape and budgets, `profile_hash`, the binding between `version.json` and the catalog bytes, length and SHA-256 of every GLB, and the GLB precheck. It never reads `.git` or runs Git, LFS or Blender. Canonical JSON is RFC 8785 throughout, with the core as the only implementation.
 
-## 4. Budgets
+## 4. Safety limits and reference values
 
-| Object | Limit |
+These hard limits bound parsing and allocations, not model quality or guaranteed rendering performance. `realm.json` has no budget or quality-policy field. Core configuration exposes `limits.safety`, advisory `limits.reference`, independent `viewer` defaults and a separate `lod1` export policy. The LOD policy controls generated geometry and texture detail; it does not reject author inputs.
+
+| Safety constraint | Inclusive maximum |
 | --- | --- |
-| `realm.json` | ≤ 4 MiB, ≤ 4096 entities, ≤ 32768 chunks; one entity covers ≤ 2048 chunks |
-| One GLB | ≤ 8 MiB, ≤ 100000 vertices, ≤ 300000 indices, ≤ 512 nodes, top-level arrays ≤ 8192 items; static triangle meshes, glTF 2.0; embedded PNG/JPEG ≤ 2048², decoded-pixel budget 64 MiB |
-| Rejected in GLB | External or data URIs, extensions, animation, skinning, cameras, sparse accessors |
-| Strict JSON | Duplicate keys, non-finite or overflowing numbers, non-UTF-8 encoding or BOM, nesting deeper than 40, size beyond budget |
+| Catalog | 4 MiB JSON; 4096 entities, 32768 chunks; one entity covers 2048 chunks |
+| One GLB container | 256 MiB |
+| GLB JSON chunk | 8 MiB, checked before parsing; binary geometry has the separate container budget |
+| Geometry | 16,777,216 primitive POSITION vertices; 50,331,648 indices and per-accessor elements |
+| Node graph | 65,536 nodes; depth 256 edges |
+| Top-level arrays and primitives per mesh | 1,048,576 items |
+| Images | PNG/JPEG, each edge 16,384 pixels; total decoded estimate 4 GiB at four bytes per pixel |
+| Strict JSON | Depth 40; reject duplicate keys, non-finite or overflowing numbers, non-UTF-8 and BOM |
+| Unsupported GLB content | External/data URIs, extensions, animation, skinning, cameras, sparse accessors |
 
-All budgets are defined once in the core; `rou validate` and the viewer run the same implementation, so nothing can be committed yet fail to display. Loading checks the catalog and index first, then GLB length and SHA-256, JSON and buffer bounds, geometry and image budgets, and only then hands the file to Godot's native glTF importer. The precheck is neither a complete glTF conformance check nor a sandbox around the native parser; untrusted network assets in S2 need isolation and fuzzing first.
+`rou build` warns, but succeeds, when a generated asset exceeds 32 MiB, 500,000 vertices, a 4096-pixel image edge or a 512 MiB decoded-image estimate. Values exactly at a reference do not warn. Both full and lod1 assets have statistics and warnings. These references do not affect `validate`, downloads or viewer import. A 20 MiB / 300,000-vertex / 4K model passes the precheck without a reference warning; larger models below safety limits remain valid.
+
+All limits and metrics are implemented once in the Rust core. Hosts check file length before reading, then verify GLB bytes and references before native import. Reported metrics count primitive accessors without multiplying node instances and estimate image bytes without decoding. The precheck is not a full glTF validator or a native-importer sandbox. Safety ceilings do not guarantee that every allowed combination will fit a particular machine's memory; simultaneous import and main-thread scene creation still need measurement.
 
 ## 5. Viewer start and loading behaviour
 
 The start location does not come from realm data. The default is above the centre of the union of all entity world bounds, at a distance equal to the union's diagonal, looking at the centre; an empty world starts 2 m above the origin looking at it. The player can pick a place on entry or at any time through the chunk map, the entity list or typed coordinates; recent positions are stored per realm ID in the local user directory, never in the bundle; `--at=x,y,z` (metres) sets the start directly.
 
-The viewer has three distance tiers, measured by the Rust core against occupied chunk AABBs. A spanning entity uses its nearest covered chunk and appears once. Default radii are **48 / 200 / 4000 m**; `--radius=16,64,4000` or the Settings tab changes them in metres. Radii must be finite, positive and nondecreasing, with a maximum of 4,000,000 m supplied by core configuration. Equal adjacent radii are allowed and the nearer tier wins their shared boundary. Defaults are viewer settings, not profile fields. The near tier renders the complete GLB with generated mesh LODs selected by screen size. The middle tier retains that same GLB, with a lower mesh LOD bias so available simplified meshes are selected earlier, and disables shadow casting and GI participation for that tier. Near-tier shadows and GI participation are restored on approach. Low-complexity meshes may have no useful simplification. A separate middle-detail GLB is not part of this format.
+The viewer has three distance tiers, measured by the Rust core against occupied chunk AABBs. A spanning entity uses its nearest covered chunk and appears once. Default radii are **48 / 200 / 4000 m**; `--radius=16,64,4000` or the Settings tab changes them in metres. Radii must be finite, positive and nondecreasing, with a maximum of 4,000,000 m supplied by core configuration. Equal adjacent radii are allowed and the nearer tier wins their shared boundary. Defaults are viewer settings, not profile fields. The near tier renders the complete GLB with generated mesh LODs selected by screen size. The middle tier loads the separate `lod1` GLB with simplified geometry and textures up to a 1024-pixel edge, uses a lower mesh LOD bias and disables shadow casting and GI participation. Missing lod1 displays a marked box and never falls back to importing the full asset or downloading anything. Near-tier shadows and GI participation are restored on approach. Low-complexity meshes may have no useful simplification. Each hash has an independent import task, failure state and cache entry; identical full/lod1 hashes share them. Valid replacements keep the old scene until attachment of the new one, while an unavailable target tier restores its box. Failures in one tier do not disable the other.
 
 On open, all catalog world bounds become translucent boxes in one MultiMesh, without reading GLBs. Rust supplies each box's metre center and size, the visible far set, and the boxes hidden by resident scenes. A box stays visible during loading and is hidden only after its scene mounts; detaching a scene restores its box in the same frame. Boxes outside the far radius are hidden. A background file-availability scan marks missing assets even in the far tier. Missing boxes are orange; assets rejected by validation are red, and the entity details retain the reason. Missing, invalid, known-empty and unknown-metadata states remain distinct. Reopening the bundle retries rejected assets.
 
@@ -112,11 +122,11 @@ At most two unique GLBs import concurrently through WorkerThreadPool. File reads
 
 Completion is checked against WorkerThreadPool task state, not only the publication queue: a finished task without a result produces a visible worker failure and releases its slot. A task exceeding 30 seconds is reported as timed out; the loader stops accepting new imports, rejects remaining requests and quarantines the running task until it can safely discard its late result. Native calls cannot be forcibly cancelled; world switching stays nonblocking, while application exit joins outstanding tasks. A permanently blocked native call therefore still requires process-level isolation or termination.
 
-`F1` shows radii, tier populations, the pending queue and worker count; `F2` shows the chunk grid. Frame reports start at the second process tick after opening a world, with no warm-up frames removed. Frames containing main-thread scene generation, mounts or unloads are grouped as `mount_frames`; the remaining frames are `steady_frames`, including startup and the released overview. Both groups include count and P50/P95/P99. Worker preparation, main-thread scene generation and total mount durations are also reported separately. The 30-second flight begins its route at first readiness, after the harness has acquired focus; all recorded frames count even if focus is later lost. M2 performance acceptance uses the balanced preset (SDFGI disabled); the normal viewer default remains unchanged. Bundles are regenerable; copy the whole directory to keep a particular one.
+`F1` identifies near/full, middle/lod1 and far/box assets, radii, tier populations, the pending queue and worker count; `F2` shows the chunk grid. Frame reports start at the second process tick after opening a world, with no warm-up frames removed. Frames containing main-thread scene generation, mounts or unloads are grouped as `mount_frames`; the remaining frames are `steady_frames`, including startup and the released overview. Both groups include count and P50/P95/P99. Worker preparation, main-thread scene generation and total mount durations are also reported separately. The 30-second flight begins its route at first readiness, after the harness has acquired focus; all recorded frames count even if focus is later lost. M2 performance acceptance uses the balanced preset (SDFGI disabled); the normal viewer default remains unchanged. Bundles are regenerable; copy the whole directory to keep a particular one.
 
 ## 6. Test cases and verification
 
-`rou/crates/rou-core/tests/fixtures/spatial.json` holds reviewed spatial and catalog cases and is read-only; expected values are never regenerated by the implementation under test. In `profiles`, `shape_accepted` means the case parses into the profile type and `accepted` means both layers pass; `positions` cover owner and offset; `bounds` cover half-open AABBs; `catalogs` cover spanning entities, moves, shared assets, empty catalogs and rejection of unknown catalogs. Catalog cases check metadata only; placeholder asset descriptions are not real GLBs. The default profile and its `profile_hash` are unchanged under RFC 8785 because the profile contains only integers and ASCII strings.
+`rou/crates/rou-core/tests/fixtures/spatial.json` holds reviewed spatial and catalog cases and is read-only; expected values are never regenerated by the implementation under test. In `profiles`, `shape_accepted` means the case parses into the profile type and `accepted` means both layers pass; `positions` cover owner and offset; `bounds` cover half-open AABBs; `catalogs` cover spanning entities, moves, shared assets, empty catalogs and rejection of unknown catalogs. The test harness adapts only the historical catalog format envelope and supplies lod1 descriptors; spatial vectors and fixture bytes stay unchanged. Catalog cases check metadata only; placeholder asset descriptions are not real GLBs. The default profile and its `profile_hash` are unchanged under RFC 8785 because the profile contains only integers and ASCII strings.
 
 ```sh
 make test-spatial

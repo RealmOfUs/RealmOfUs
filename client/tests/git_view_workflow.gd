@@ -282,7 +282,8 @@ func run_test() -> void:
 				"id": "house" if index == 0 else "house_copy",
 				"position_mm": position,
 				"bounds_mm": bounds,
-				"asset": original.asset
+				"asset": original.asset,
+				"lod1": original.asset
 			}
 		)
 	var shared := Core.invoke(

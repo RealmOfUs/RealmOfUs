@@ -187,6 +187,7 @@ impl World {
                 offset_mm,
                 bounds_mm,
                 asset: record.asset.clone(),
+                lod1: record.lod1.clone(),
             });
         }
         Ok(View {
@@ -271,6 +272,7 @@ impl View {
         let mut entities = self.entities.clone();
         for entity in &mut entities {
             entity.asset.path = paths::object(&entity.asset.sha256);
+            entity.lod1.path = paths::object(&entity.lod1.sha256);
         }
         let result = Manifest {
             format: formats::PREVIEW.into(),

@@ -134,6 +134,21 @@ pub fn render(kind: &str, value: &Value) -> String {
                 named(&value["generated"], "model", "models"),
                 array(&value["reused"]).len()
             );
+            for id in array(&value["generated"]) {
+                let id = string(id);
+                for tier in ["asset", "lod1"] {
+                    let metrics = &value["metrics"][&id][tier];
+                    if metrics.is_null() {
+                        writeln!(text, "  {id} {tier}: statistics unavailable").unwrap();
+                        continue;
+                    }
+                    writeln!(text, "  {id} {tier}: {} bytes, {} vertices, {} indices, {} nodes, max image {} px, decoded {} bytes",
+                        metrics["bytes"], metrics["vertices"], metrics["indices"], metrics["nodes"], metrics["max_image_dimension"], metrics["image_decoded_bytes"]).unwrap();
+                }
+                for warning in array(&value["warnings"][&id]) {
+                    writeln!(text, "warning: {id}: {}", string(warning)).unwrap();
+                }
+            }
             if !array(&value["removed"]).is_empty() {
                 writeln!(text, "Removed: {}", list(&value["removed"])).unwrap();
             }

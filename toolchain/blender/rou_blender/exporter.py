@@ -45,26 +45,30 @@ def export_entity(root, output):
     scene.check_static(objects)
     original = root.location.copy()
     temporary = output / (identity + ".glb")
+    simplified = output / (identity + ".lod1.glb")
     try:
         with scene.export_visibility(objects):
             world_bounds = core.call("blender.bounds_native", scene.local_bounds(objects))
             root.location = (0, 0, 0)
             bpy.context.view_layer.update()
             scene.export_glb(temporary)
+            scene.export_lod1(objects, temporary, simplified, core.CONFIG["lod1"])
     finally:
         root.location = original
         bpy.context.view_layer.update()
-    data = core.read_bytes(temporary, core.LIMITS["glb_bytes"])
-    core.call("glb.precheck", data)
-    asset = core.call("file.descriptor", data)
-    asset["path"] = core.call("asset.path", asset["sha256"])
-    temporary.replace(output / asset["path"])
+    assets = {}
+    for key, path in [("asset", temporary), ("lod1", simplified)]:
+        result = core.call("glb.inspect", core.read_bytes(path, core.LIMITS["glb_bytes"]))
+        asset = result["descriptor"]
+        asset["path"] = core.call("asset.path", asset["sha256"])
+        path.replace(output / asset["path"])
+        assets[key] = asset
     return {
         "id": identity,
         "label": root.name,
         "position_mm": position,
         "bounds_mm": world_bounds,
-        "asset": asset,
+        **assets,
     }
 
 

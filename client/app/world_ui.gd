@@ -237,8 +237,14 @@ func select_entity(id: String) -> void:
 	selection = id
 	var entity: Dictionary = host.catalog[id]
 	entity_details.text = (
-		"%s\n%s\n\nOwner chunk: %s\nRuntime: %.1f KiB"
-		% [entity.get("label", id), id, str(entity.owner_chunk), entity.asset.bytes / 1024.0]
+		"%s\n%s\n\nOwner chunk: %s\nNear: %.1f KiB\nMiddle: %.1f KiB"
+		% [
+			entity.get("label", id),
+			id,
+			str(entity.owner_chunk),
+			entity.asset.bytes / 1024.0,
+			entity.lod1.bytes / 1024.0
+		]
 	)
 	if host.rejected.has(id):
 		entity_details.text += "\n\n" + str(host.rejected[id])

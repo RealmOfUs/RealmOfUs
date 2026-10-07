@@ -6,7 +6,7 @@ Production path: Rust `rou` → native Git/LFS → headless Blender → fixed-re
 | --- | --- |
 | `../rou/` | Core, Git/CLI, C ABI and GDExtension |
 | `blender/rou_blender/` | Complete original projects, placement, session guard, local preview |
-| `blender/export_git_realm.py` | Export helper for object/collection entries of a frozen project |
+| `blender/export_git_realm.py` | Full/lod1 export from frozen object/collection entries; statistics through librou |
 | `build/native.py` | Builds and loads the native library for development scripts; no domain rules |
 | `build/`, `tests/blender/` | Black-box acceptance and packaging |
 
@@ -51,7 +51,7 @@ After renaming a registered author root, run "register entities" before saving a
 
 The real Preferences install and enable/disable test in `make test-addon` runs with `BLENDER_USER_*` pointed at `build/addon-install/`, so it never writes your user configuration.
 
-The add-on's local preview writes only `realm.json` and `objects/`; without a version sidecar the viewer shows the bundle as unbound. Git staging and commits stay explicit author actions; the session guard cannot intercept external programs or native Blender saves.
+The add-on's local preview writes `rou-preview/0.2` with full/lod1 descriptors into `realm.json` and both payloads into `objects/`; without a version sidecar the viewer shows the bundle as unbound. Git staging and commits stay explicit author actions; the session guard cannot intercept external programs or native Blender saves.
 
 On macOS, packaging ad-hoc signs the dylib inside the ZIP and verifies it with `codesign --verify --strict`. This is neither Developer ID signing nor notarisation. A delivery probe records quarantine attributes, `spctl` and the real Blender load result on isolated copies without changing system policy:
 
@@ -100,6 +100,25 @@ The `godot` crate is pinned to 0.5.5 with API 4.7. The generic entry point is `R
 - `compare_grids.py`: 16/32/64 m calibration comparison through the native library with equal 48 m near/middle/far radii; the observed positions are test data. All 12 observations run in `make test-spatial`, and therefore `make test`.
 - `benchmark_viewer.py`: real-window frame times, RSS and start-up time, with focus validity recorded separately; supports `--at`, `--sample`, `--radius`, and `--json`. `--flight` waits up to 15 seconds for window focus before opening the world, runs the complete development streaming route and releases full scenes for the last third of the run. Every measured frame still counts if focus is later lost; always check `foreground_measurement_valid`. RSS samples stop when the engine writes its report and exclude exit-time zero values. RSS samples and separate mount/steady count/P50/P95/P99 remain in the report. `--activate` uses the existing macOS PID activation mechanism.
 - `make bench-viewer`: creates a deterministic 800-entity preview from three verified calibration GLBs and runs a 30-second balanced streaming flight (SDFGI disabled), reporting to `/tmp/rou-m2-viewer.json`. The normal viewer default is unchanged. Frame groups include startup from the second process tick, without warm-up exclusion; main-thread scene generation belongs to the mount group. `examples/scale/make_bundle.py` itself needs only Python and the native core. Its positions are synthetic and may overlap; it is not an authored city or a many-unique-assets benchmark.
-- `client/tests/streaming_contract.gd`: dense-GLB worker/LOD, cancellation and cache reuse, worker failure/timeout recovery, hysteresis, CLI radius and cache-eviction checks, included in `make test-spatial`. Godot acceptance harnesses reject any `ERROR:` line, including engine RID errors, even if a script prints a PASS marker.
+- `client/tests/streaming_contract.gd`: dense-GLB worker/LOD, separate middle assets and missing-tier isolation, cancellation and cache reuse, worker failure/timeout recovery, hysteresis, CLI radius and cache-eviction checks, included in `make test-spatial`. Godot acceptance harnesses reject any `ERROR:` line, including engine RID errors, even if a script prints a PASS marker.
 - `client/tests/rendered_workflow.gd`: scripted input in a real window to check navigation, file open/reload and the sample room map.
 - `examples/villa_anahid/`: modelling and local tour sample that never writes sample waypoints into a generic bundle.
+
+## Detailed model baseline
+
+After `make all`, run `python3 examples/scale/make_detailed_realm.py` in a fresh
+output directory (default `build/scale/detailed`). It downloads and verifies the
+explicit Poly Haven CC0 4K assets into `.cache/walsh-offline`, creates three
+models, builds full/lod1 GLBs, stages and validates the index, and exports a
+complete worktree bundle. Download, hash or validation failures stop the run.
+It does not create a Git commit. Furniture uses explicit SIMPLE tessellation
+for geometry stress, and the original procedural woven panel exceeds the
+vertex warning reference. This is a measurement fixture, not a claim that
+subdivision adds scanned detail. Sources stay unchanged during build.
+
+The report is `build/scale/detailed/.rou/detailed-report.json`; pass the emitted
+catalog path to `benchmark_viewer.py --flight --balanced --activate` for a real
+foreground measurement. Diagnostics perturb timing, so allocation/leak probes
+must be measured separately. Do not compare instrumented timings with the
+normal balanced frame budget. Current measured sizes and timings are in
+[status](../doc/status.md).

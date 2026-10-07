@@ -127,7 +127,7 @@ def build(output):
     # The same entity geometry and IDs are indexed under each experimental grid size.
     raw = json.loads((output / "preview/realm.json").read_text())
     for size in [16, 32, 64]:
-        core.write_json(output / "preview" / f"realm-{size}.json", with_grid(raw, size, core))
+        core.write_json(output / f"realm-{size}.json", with_grid(raw, size, core))
     print("ROU_FIXTURE_COMPLETE", str(output / "preview/realm.json"))
 
 

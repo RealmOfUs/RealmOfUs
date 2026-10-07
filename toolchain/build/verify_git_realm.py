@@ -137,7 +137,18 @@ class Acceptance:
         official.mkdir()
         self.rou(official, "init")
         self.blender(official)
-        self.rou(official, "build")
+        built = self.rou(official, "build")
+        core = native.load_core()
+        for model in built["generated"]:
+            record = json.loads((official / f"runtime/{model}.json").read_text())
+            for tier in ["asset", "lod1"]:
+                asset = record[tier]
+                inspected = core.call("glb.inspect", (official / asset["path"]).read_bytes())
+                self.check(
+                    f"{model} {tier} digest and metrics",
+                    inspected["descriptor"] == {key: asset[key] for key in ["sha256", "bytes"]}
+                    and inspected["metrics"] == built["metrics"][model][tier],
+                )
         self.check(
             "build does not stage", not self.git(official, "diff", "--cached", "--name-only")
         )
@@ -184,22 +195,30 @@ class Acceptance:
         selected_view = self.directory / "selected-view"
         before = set(self.payloads(alice))
         selected = self.rou(alice, "view", "HEAD", "--output", str(selected_view))
+        catalog = json.loads((selected_view / "realm.json").read_text())
+        selected_sources = {}
+        for entity in catalog["entities"]:
+            if entity["id"] in {"house", "plaque"}:
+                for tier, suffix in [("asset", ".glb"), ("lod1", ".lod1.glb")]:
+                    selected_sources.setdefault(entity[tier]["sha256"], []).append(
+                        alice / "runtime" / (entity["id"] + suffix)
+                    )
         self.check(
             "default view includes only house and plaque without downloads",
             selected["downloaded_entities"] == ["house", "plaque"]
-            and len(list((selected_view / "objects").iterdir())) == 2
+            and len(list((selected_view / "objects").iterdir())) == len(selected_sources)
             and set(self.payloads(alice)) == before,
         )
-        catalog = json.loads((selected_view / "realm.json").read_text())
         self.check("selected bundle keeps all four entities", len(catalog["entities"]) == 4)
         self.check(
             "materialized runtime assets are hard-linked",
             all(
-                (selected_view / entity["asset"]["path"]).samefile(
-                    alice / "runtime" / (entity["id"] + ".glb")
+                # Equal-SHA tiers share one object, linked to either materialized source.
+                any(
+                    (selected_view / "objects" / (sha + ".glb")).samefile(source)
+                    for source in sources
                 )
-                for entity in catalog["entities"]
-                if entity["id"] in {"house", "plaque"}
+                for sha, sources in selected_sources.items()
             ),
         )
         chunk_view = self.directory / "chunk-view"
@@ -281,8 +300,16 @@ class Acceptance:
         )
         self.rou(official, "view", first, "--all", "--output", str(initial_view))
         prepared = self.rou(alice, "view", "HEAD", "--all", "--output", str(merged_view))
+        merged_catalog = json.loads((merged_view / "realm.json").read_text())
+        expected_shas = {
+            entity[tier]["sha256"]
+            for entity in merged_catalog["entities"]
+            for tier in ["asset", "lod1"]
+        }
         self.check(
-            "explicit all includes four models", len(list((merged_view / "objects").iterdir())) == 4
+            "explicit all includes four models",
+            len(merged_catalog["entities"]) == 4
+            and len(list((merged_view / "objects").iterdir())) == len(expected_shas),
         )
         self.check(
             "view resolves symbolic revision to immutable OID",

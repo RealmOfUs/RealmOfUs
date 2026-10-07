@@ -79,7 +79,7 @@ def call(operation, value=b""):
 CONFIG = call("config")
 FORMATS = CONFIG["formats"]
 PATHS = CONFIG["paths"]
-LIMITS = CONFIG["limits"]
+LIMITS = CONFIG["limits"]["safety"]
 
 
 def require(condition, message):

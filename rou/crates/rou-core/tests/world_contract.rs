@@ -19,7 +19,10 @@ fn spatial_selection_expands_shared_dependencies_and_keeps_runtime_cone() {
         selected.paths,
         ["sources/house/house.blend", "sources/shared/wood.png"]
     );
-    assert_eq!(selected.assets, ["runtime/house.glb"]);
+    assert_eq!(
+        selected.assets,
+        ["runtime/house.glb", "runtime/house.lod1.glb"]
+    );
     assert_eq!(
         selected.directories,
         [
@@ -299,4 +302,86 @@ fn author_inputs_cannot_reference_runtime_outputs() {
     model.dependencies.pop();
     model.source = "runtime/self.blend".into();
     assert_eq!(model.validate().unwrap_err().code, "invalid_source");
+}
+
+#[test]
+fn lod1_is_mandatory_and_versions_and_paths_are_strict() {
+    let (world, records) = common::world();
+    let mut record = serde_json::to_value(&records["house"]).unwrap();
+    record.as_object_mut().unwrap().remove("lod1");
+    assert!(json::from_value::<rou_core::documents::Build>(record).is_err());
+    let mut record = records["house"].clone();
+    record.format = "rou-build/0.1".into();
+    assert!(record.validate_shape().is_err());
+    record.format = rou_core::formats::BUILD.into();
+    record.lod1.path = "runtime/other.lod1.glb".into();
+    assert!(record.validate_shape().is_err());
+    let manifest = world.projections(&records).unwrap().manifest().unwrap();
+    assert_eq!(
+        manifest.entities[0].asset.sha256,
+        manifest.entities[0].lod1.sha256
+    );
+    let mut value = serde_json::to_value(&manifest).unwrap();
+    value["entities"][0].as_object_mut().unwrap().remove("lod1");
+    assert!(json::from_value::<rou_core::documents::Manifest>(value).is_err());
+    let mut old = manifest.clone();
+    old.format = "rou-preview/0.1".into();
+    assert!(old.validate().is_err());
+    let mut inconsistent = manifest;
+    inconsistent.entities[0].lod1.bytes += 1;
+    assert_eq!(inconsistent.validate().unwrap_err().code, "length_mismatch");
+}
+
+#[test]
+fn retired_formats_report_regeneration_without_accepting_legacy_documents() {
+    let (world, records) = common::world();
+    let mut build = serde_json::to_value(&records["house"]).unwrap();
+    build["format"] = value!("rou-build/0.1");
+    build.as_object_mut().unwrap().remove("lod1");
+    let mut manifest =
+        serde_json::to_value(world.projections(&records).unwrap().manifest().unwrap()).unwrap();
+    manifest["format"] = value!("rou-preview/0.1");
+    for entity in manifest["entities"].as_array_mut().unwrap() {
+        entity.as_object_mut().unwrap().remove("lod1");
+    }
+    let export = value!({"format":"rou-blender-export/0.1","models":[{
+        "id":"house","asset_path":"runtime/house.glb",
+        "bounds_blender_m":[[0,0,0],[1,1,1]],"dependencies":[]
+    }],"tool_versions":{"exporter":"rou-blender-export/0.1"}});
+    for (error, current) in [
+        (
+            json::from_value::<Build>(build.clone()).unwrap_err(),
+            formats::BUILD,
+        ),
+        (
+            json::from_value::<Manifest>(manifest).unwrap_err(),
+            formats::PREVIEW,
+        ),
+        (
+            json::from_value::<BlenderExport>(export).unwrap_err(),
+            formats::BLENDER_EXPORT,
+        ),
+    ] {
+        assert_eq!(error.code, "invalid_json");
+        assert!(
+            error
+                .message
+                .contains(&format!("document predates {current}"))
+        );
+        assert!(error.message.contains("regenerate with rou build"));
+    }
+    for format in [formats::BUILD, "rou-build/0.99"] {
+        build["format"] = value!(format);
+        let error = json::from_value::<Build>(build.clone()).unwrap_err();
+        assert!(error.message.contains("missing field `lod1`"));
+        assert!(!error.message.contains("predates"));
+    }
+    for bytes in [
+        br#"{"format":"rou-build/0.1","broken":}"#.as_slice(),
+        br#"{"format":"rou-build/0.1","format":"rou-build/0.2"}"#.as_slice(),
+    ] {
+        let error = json::parse::<Build>(bytes).unwrap_err();
+        assert_eq!(error.code, "invalid_json");
+        assert!(!error.message.contains("predates"));
+    }
 }

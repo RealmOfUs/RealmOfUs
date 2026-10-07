@@ -23,16 +23,10 @@ def fetch(url, path):
     )
 
 
-def main():
+def download_assets(names, model_resolution="2k", provenance="asset-provenance.json"):
+    """Fetch explicit assets into the shared cache; network or integrity failures are fatal."""
     jobs = []
-    for name in [
-        "wool_boucle",
-        "rough_linen",
-        "white_oak_veneer",
-        "fern_02",
-        "potted_plant_02",
-        "ceramic_vase_03",
-    ]:
+    for name in names:
         manifest = CACHE / (name + ".json")
         if not manifest.exists():
             fetch("https://api.polyhaven.com/files/" + name, manifest)
@@ -42,7 +36,7 @@ def main():
                 entry = data[channel]["4k"]["jpg"]
                 jobs.append((name, ASSETS / name / Path(entry["url"]).name, entry))
         else:
-            entry = data["blend"]["2k"]["blend"]
+            entry = data["blend"][model_resolution]["blend"]
             jobs.append((name, ASSETS / name / Path(entry["url"]).name, entry))
             for relative, dependency in entry.get("include", {}).items():
                 jobs.append((name, ASSETS / name / relative, dependency))
@@ -66,7 +60,22 @@ def main():
 
     with concurrent.futures.ThreadPoolExecutor(5) as pool:
         records = list(pool.map(download, jobs))
-    (CACHE / "asset-provenance.json").write_text(json.dumps(records, indent=2) + "\n")
+    (CACHE / provenance).write_text(json.dumps(records, indent=2) + "\n")
+
+    return records
+
+
+def main():
+    download_assets(
+        [
+            "wool_boucle",
+            "rough_linen",
+            "white_oak_veneer",
+            "fern_02",
+            "potted_plant_02",
+            "ceramic_vase_03",
+        ]
+    )
 
 
 if __name__ == "__main__":

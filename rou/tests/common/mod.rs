@@ -20,6 +20,13 @@ pub fn triangle() -> (Value, Vec<u8>) {
         binary,
     )
 }
+pub fn triangle_lod1() -> (Value, Vec<u8>) {
+    let (mut document, mut binary) = triangle();
+    document["extras"] = json!({"detail":"lod1"});
+    binary[12..16].copy_from_slice(&0.5_f32.to_le_bytes());
+    binary[28..32].copy_from_slice(&0.5_f32.to_le_bytes());
+    (document, binary)
+}
 pub fn glb(document: &Value, binary: &[u8]) -> Vec<u8> {
     let mut text = json::canonical(document).unwrap();
     while text.len() % 4 != 0 {
@@ -86,6 +93,11 @@ pub fn world() -> (World, BTreeMap<String, Build>) {
                 inputs: inputs.clone(),
                 asset: Asset {
                     path: paths::asset(id),
+                    sha256: json::digest(&asset_bytes),
+                    bytes: asset_bytes.len() as u64,
+                },
+                lod1: Asset {
+                    path: paths::lod1(id),
                     sha256: json::digest(&asset_bytes),
                     bytes: asset_bytes.len() as u64,
                 },

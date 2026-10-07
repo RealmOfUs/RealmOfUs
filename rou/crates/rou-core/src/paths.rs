@@ -103,6 +103,12 @@ pub fn entity(id: &str) -> String {
 pub fn asset(id: &str) -> String {
     format!("{RUNTIME}{id}.glb")
 }
+/// Construct `runtime/<id>.lod1.glb` from a model ID.
+///
+/// Only concatenate the path; callers must validate the ID first.
+pub fn lod1(id: &str) -> String {
+    format!("{RUNTIME}{id}.lod1.glb")
+}
 /// Construct `runtime/<id>.json` from a model ID.
 ///
 /// Only concatenate the path; callers must validate the ID or SHA-256 shape first.

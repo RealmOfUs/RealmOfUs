@@ -42,7 +42,7 @@ help: ## List targets
 
 all: rou godot-ext ffi addon ## CLI, Godot extension, C library and Blender extension
 
-rou: ## Build the release CLI into build/bin/rou
+rou: ffi ## Build the release CLI into build/bin/rou
 	cd rou && $(CARGO) build --release -p rou
 	mkdir -p build/bin
 	cp rou/target/release/rou $(CLI)
@@ -85,7 +85,9 @@ test-spatial: godot-ext ## Reviewed spatial cases through the Godot extension
 test-git: rou godot-ext ## Two-author Git/LFS flow with real Blender and headless Godot
 	$(PYTHON) toolchain/build/verify_git_realm.py
 
-test-addon: addon ## Blender extension: local preview, authoring session, real install
+test-addon: addon ## Blender extension, material-preserving LOD export and real install
+	$(BLENDER) --background --factory-startup --python-exit-code 1 --python toolchain/tests/blender/verify_lod1.py
+	$(BLENDER) --background --factory-startup --python-exit-code 1 --python toolchain/tests/blender/verify_lod1_instancing.py
 	rm -rf build/addon-preview build/addon-authoring build/addon-install
 	$(BLENDER) --background --factory-startup --python-exit-code 1 --python toolchain/tests/blender/verify_addon.py -- --addon-zip "$(ROOT)/$(ADDON)" --output "$(ROOT)/build/addon-preview"
 	$(BLENDER) --background --factory-startup --python-exit-code 1 --python toolchain/tests/blender/verify_git_authoring.py -- --addon-zip "$(ROOT)/$(ADDON)" --output "$(ROOT)/build/addon-authoring"

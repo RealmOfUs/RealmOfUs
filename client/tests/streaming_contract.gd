@@ -27,46 +27,7 @@ func run() -> void:
 	mesh.height = 2
 	mesh.radial_segments = 64
 	mesh.rings = 32
-	var arrays := mesh.get_mesh_arrays()
-	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
-	var positions := vertices.to_byte_array()
-	var binary := positions + indices.to_byte_array()
-	var geometry := {
-		"asset": {"version": "2.0"},
-		"buffers": [{"byteLength": binary.size()}],
-		"bufferViews":
-		[
-			{"buffer": 0, "byteLength": positions.size()},
-			{"buffer": 0, "byteOffset": positions.size(), "byteLength": indices.size() * 4}
-		],
-		"accessors":
-		[
-			{
-				"bufferView": 0,
-				"componentType": 5126,
-				"count": vertices.size(),
-				"type": "VEC3",
-				"min": [-1, -1, -1],
-				"max": [1, 1, 1]
-			},
-			{"bufferView": 1, "componentType": 5125, "count": indices.size(), "type": "SCALAR"}
-		],
-		"meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
-		"nodes": [{"mesh": 0}],
-		"scenes": [{"nodes": [0]}],
-		"scene": 0
-	}
-	var text := JSON.stringify(geometry).to_utf8_buffer()
-	while text.size() % 4 != 0:
-		text.append(32)
-	var bytes := (
-		PackedInt32Array([0x46546c67, 2, 28 + text.size() + binary.size(), text.size(), 0x4e4f534a])
-		. to_byte_array()
-	)
-	bytes.append_array(text)
-	bytes.append_array(PackedInt32Array([binary.size(), 0x004e4942]).to_byte_array())
-	bytes.append_array(binary)
+	var bytes := mesh_bytes(mesh)
 	var inspected := Core.invoke("glb.inspect", bytes)
 	check(inspected.ok, "Dense GLB satisfies the Rust budget: " + Core.message(inspected))
 	if not inspected.ok:
@@ -87,7 +48,8 @@ func run() -> void:
 					"id": "sphere",
 					"position_mm": [0, 0, 0],
 					"bounds_mm": {"min": [-1000, -1000, -1000], "max": [1000, 1000, 1000]},
-					"asset": asset
+					"asset": asset,
+					"lod1": asset
 				}
 			]
 		}
@@ -196,6 +158,7 @@ func run() -> void:
 		stalled.drained() and not viewer.retired_loaders.has(stalled),
 		"Late retired work is released"
 	)
+	await check_distinct_lod1(viewer, folder, bundle.value, bytes)
 	viewer.clear_realm()
 	viewer.queue_free()
 	await process_frame
@@ -251,3 +214,134 @@ func check_task_recovery() -> void:
 		await process_frame
 	check(worker.drained() and worker.completed.is_empty(), "Retired late results are reaped")
 	worker.shutdown()
+
+
+func mesh_bytes(mesh: PrimitiveMesh) -> PackedByteArray:
+	var arrays := mesh.get_mesh_arrays()
+	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX]
+	var positions := vertices.to_byte_array()
+	var binary := positions + indices.to_byte_array()
+	var geometry := {
+		"asset": {"version": "2.0"},
+		"buffers": [{"byteLength": binary.size()}],
+		"bufferViews":
+		[
+			{"buffer": 0, "byteLength": positions.size()},
+			{"buffer": 0, "byteOffset": positions.size(), "byteLength": indices.size() * 4}
+		],
+		"accessors":
+		[
+			{
+				"bufferView": 0,
+				"componentType": 5126,
+				"count": vertices.size(),
+				"type": "VEC3",
+				"min": [-1, -1, -1],
+				"max": [1, 1, 1]
+			},
+			{"bufferView": 1, "componentType": 5125, "count": indices.size(), "type": "SCALAR"}
+		],
+		"meshes": [{"primitives": [{"attributes": {"POSITION": 0}, "indices": 1}]}],
+		"nodes": [{"mesh": 0}],
+		"scenes": [{"nodes": [0]}],
+		"scene": 0
+	}
+	var text := JSON.stringify(geometry).to_utf8_buffer()
+	while text.size() % 4 != 0:
+		text.append(32)
+	var bytes := (
+		PackedInt32Array([0x46546c67, 2, 28 + text.size() + binary.size(), text.size(), 0x4e4f534a])
+		. to_byte_array()
+	)
+	bytes.append_array(text)
+	bytes.append_array(PackedInt32Array([binary.size(), 0x004e4942]).to_byte_array())
+	bytes.append_array(binary)
+	return bytes
+
+
+func write_bytes(path: String, bytes: PackedByteArray) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_buffer(bytes)
+	file.close()
+
+
+func check_distinct_lod1(
+	viewer: Node3D, folder: String, bundle: Dictionary, full_bytes: PackedByteArray
+) -> void:
+	var simplified := mesh_bytes(BoxMesh.new())
+	var inspected := Core.invoke("glb.inspect", simplified)
+	check(inspected.ok, "Distinct middle-detail fixture passes safety precheck")
+	var lod1: Dictionary = inspected.value.descriptor.duplicate()
+	lod1.path = Core.invoke("asset.path", lod1.sha256).value
+	var full: Dictionary = bundle.entities[0].asset
+	check(lod1.sha256 != full.sha256, "Detail tiers have distinct hashes")
+	bundle.entities[0].lod1 = lod1
+	write_bytes(folder.path_join(lod1.path), simplified)
+	write_bytes(folder.path_join("realm.json"), JSON.stringify(bundle).to_utf8_buffer())
+	check(viewer.open_realm(folder), "Dual-asset bundle opens")
+	check(await Streaming.drain(viewer), "Near asset loads")
+	check(viewer.loaded_assets.sphere == full.sha256, "Near tier uses the full hash")
+	viewer.navigate_position(Vector3(0, 80, 0))
+	check(viewer.loaded.has("sphere"), "Keep the previous scene during a valid tier replacement")
+	check(await Streaming.drain(viewer), "Middle asset loads independently")
+	check(viewer.loaded_assets.sphere == lod1.sha256, "Middle tier uses the lod1 hash")
+	check(
+		viewer.prototypes.size() == 2 and viewer.asset_imports == 2,
+		"Each SHA has its own cache entry"
+	)
+	check(not viewer.impostors.instances.sphere.visible, "Mounted lod1 hides its box")
+	viewer.set_pose(viewer.layout.entities.sphere.focus)
+	check(await Streaming.drain(viewer), "Near asset is restored")
+	check(
+		viewer.loaded_assets.sphere == full.sha256 and viewer.asset_imports == 2,
+		"Returning near reuses the full prototype"
+	)
+	viewer.clear_realm()
+	DirAccess.remove_absolute(folder.path_join(lod1.path))
+	check(viewer.open_realm(folder), "Metadata opens without lod1 bytes")
+	viewer.navigate_position(Vector3(0, 80, 0))
+	check(await Streaming.drain(viewer), "Missing middle asset finishes with a visible failure")
+	check(
+		viewer.loaded.is_empty() and viewer.asset_imports == 0,
+		"Missing lod1 never imports the available full GLB"
+	)
+	check(
+		(
+			viewer.rejection_codes.sphere == Loader.MISSING_ASSET
+			and viewer.impostors.instances.sphere.visible
+		),
+		"Missing lod1 displays the marked box"
+	)
+	viewer.set_pose(viewer.layout.entities.sphere.focus)
+	check(await Streaming.drain(viewer), "Full asset remains usable when lod1 is missing")
+	check(
+		viewer.loaded_assets.sphere == full.sha256 and viewer.rejected.is_empty(),
+		"Failures are scoped to the selected SHA"
+	)
+	viewer.navigate_position(Vector3(0, 80, 0))
+	check(
+		viewer.loaded.is_empty() and viewer.impostors.instances.sphere.visible,
+		"Entering a missing middle tier releases the full scene"
+	)
+	viewer.clear_realm()
+	write_bytes(folder.path_join(lod1.path), simplified)
+	DirAccess.remove_absolute(folder.path_join(full.path))
+	check(viewer.open_realm(folder), "Metadata opens without full bytes")
+	viewer.set_pose(viewer.layout.entities.sphere.focus)
+	check(await Streaming.drain(viewer), "Missing full asset finishes with a visible failure")
+	viewer.navigate_position(Vector3(0, 80, 0))
+	check(await Streaming.drain(viewer), "Middle tier can load with the full asset missing")
+	check(
+		(
+			viewer.loaded_assets.sphere == lod1.sha256
+			and viewer.rejected.is_empty()
+			and viewer.asset_failures.has(full.sha256)
+		),
+		"Missing full asset stays recorded without poisoning lod1"
+	)
+	viewer.clear_realm()
+	write_bytes(folder.path_join(full.path), full_bytes)
+	DirAccess.remove_absolute(folder.path_join(lod1.path))
+	bundle.entities[0].lod1 = full
+	write_bytes(folder.path_join("realm.json"), JSON.stringify(bundle).to_utf8_buffer())

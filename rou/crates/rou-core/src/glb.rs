@@ -4,7 +4,7 @@
 //! Does not load external URIs or decode images, and is not a replacement for a complete
 //! glTF validator or a sandbox around the native importer.
 use crate::{Error, Result, error::require, json, limits};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 
 fn check(condition: bool, message: &str) -> Result<()> {
@@ -67,7 +67,8 @@ fn supported(value: &Value) -> Result<()> {
 }
 
 /// Resource totals for one prechecked GLB, not the rendering cost of instantiated scenes.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct Report {
     /// Total GLB container bytes, including JSON/BIN chunks and padding.
     pub bytes: usize,
@@ -79,8 +80,48 @@ pub struct Report {
     pub nodes: usize,
     /// Sum of embedded image width * height; the budget assumes four bytes per pixel.
     pub image_pixels: u64,
+    /// Largest embedded image edge, or zero when there are no images.
+    pub max_image_dimension: u32,
+    /// Estimated decoded image bytes, using four bytes per pixel.
+    pub image_decoded_bytes: u64,
     /// Length of the glTF meshes array.
     pub meshes: usize,
+}
+
+impl Report {
+    /// Return advisory build warnings; these references never affect validation.
+    pub fn warnings(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if self.bytes > limits::GLB_WARN_BYTES {
+            warnings.push(format!(
+                "GLB bytes {} exceed reference {}",
+                self.bytes,
+                limits::GLB_WARN_BYTES
+            ));
+        }
+        if self.vertices > limits::VERTICES_WARN {
+            warnings.push(format!(
+                "vertices {} exceed reference {}",
+                self.vertices,
+                limits::VERTICES_WARN
+            ));
+        }
+        if self.max_image_dimension > limits::IMAGE_WARN_DIMENSION {
+            warnings.push(format!(
+                "image edge {} exceeds reference {}",
+                self.max_image_dimension,
+                limits::IMAGE_WARN_DIMENSION
+            ));
+        }
+        if self.image_decoded_bytes > limits::IMAGE_DECODED_WARN_BYTES {
+            warnings.push(format!(
+                "decoded image bytes {} exceed reference {}",
+                self.image_decoded_bytes,
+                limits::IMAGE_DECODED_WARN_BYTES
+            ));
+        }
+        warnings
+    }
 }
 
 /// Check complete GLB bytes and return budget statistics without modifying the input.
@@ -95,9 +136,10 @@ pub struct Report {
 /// Unsupported or malformed GLBs normally return `invalid_glb`. Embedded JSON and
 /// integer parsing retain core codes such as `invalid_json`, `json_budget` or `invalid_integer`.
 pub fn precheck(data: &[u8]) -> Result<Report> {
+    check(data.len() >= 20, "GLB size below minimum (20 bytes)")?;
     check(
-        (20..=limits::GLB_BYTES).contains(&data.len()),
-        "GLB byte budget exceeded",
+        data.len() <= limits::GLB_BYTES,
+        "GLB safety limit exceeded: GLB_BYTES (256 MiB)",
     )?;
     check(
         word(data, 0)? == 0x46546c67
@@ -110,7 +152,11 @@ pub fn precheck(data: &[u8]) -> Result<Report> {
         word(data, 16)? == 0x4e4f534a && length % 4 == 0 && length <= data.len() - 20,
         "invalid GLB JSON chunk",
     )?;
-    let document = json::strict_with_limit(&data[20..20 + length], limits::GLB_BYTES)?;
+    check(
+        length <= limits::GLB_JSON_BYTES,
+        "GLB safety limit exceeded: GLB_JSON_BYTES (8 MiB)",
+    )?;
+    let document = json::strict_with_limit(&data[20..20 + length], limits::GLB_JSON_BYTES)?;
     let end = 20 + length;
     let binary = if end == data.len() {
         &[][..]
@@ -136,7 +182,7 @@ pub fn precheck(data: &[u8]) -> Result<Report> {
         if let Some(values) = value.as_array() {
             check(
                 values.len() <= limits::GLB_ARRAY_ITEMS,
-                "glTF top-level array budget exceeded",
+                "GLB safety limit exceeded: GLB_ARRAY_ITEMS",
             )?;
         }
     }
@@ -198,7 +244,10 @@ pub fn precheck(data: &[u8]) -> Result<Report> {
             _ => return Err(Error::new("invalid_glb", "unsupported accessor type")),
         };
         let count = field(accessor, "count")?;
-        check(count <= limits::INDICES, "accessor count budget exceeded")?;
+        check(
+            count <= limits::INDICES,
+            "GLB safety limit exceeded: INDICES (accessor count)",
+        )?;
         let element = width * components;
         let view = &views[view_index];
         let stride = optional(view, "byteStride", element)?;
@@ -223,9 +272,10 @@ pub fn precheck(data: &[u8]) -> Result<Report> {
     for mesh in meshes {
         object(mesh)?;
         let primitives = array(mesh, "primitives")?;
+        check(!primitives.is_empty(), "GLB mesh has no primitives")?;
         check(
-            !primitives.is_empty() && primitives.len() <= limits::GLB_ARRAY_ITEMS,
-            "primitive budget exceeded",
+            primitives.len() <= limits::GLB_ARRAY_ITEMS,
+            "GLB safety limit exceeded: GLB_ARRAY_ITEMS (primitives)",
         )?;
         for primitive in primitives {
             let primitive_object = object(primitive)?;
@@ -258,15 +308,16 @@ pub fn precheck(data: &[u8]) -> Result<Report> {
             }
             check(
                 vertices <= limits::VERTICES && indices <= limits::INDICES,
-                "geometry budget exceeded",
+                "GLB safety limit exceeded: VERTICES or INDICES",
             )?;
         }
     }
     check(vertices > 0, "empty geometry")?;
     let nodes = array(&document, "nodes")?;
+    check(!nodes.is_empty(), "GLB has no nodes")?;
     check(
-        !nodes.is_empty() && nodes.len() <= limits::NODES,
-        "node budget exceeded",
+        nodes.len() <= limits::NODES,
+        "GLB safety limit exceeded: NODES",
     )?;
     let mut parents = vec![false; nodes.len()];
     for node in nodes {
@@ -304,6 +355,7 @@ pub fn precheck(data: &[u8]) -> Result<Report> {
         index(scene, scenes.len())?;
     }
     let mut pixels = 0_u64;
+    let mut max_image_dimension = 0;
     for image in array(&document, "images")? {
         object(image)?;
         let view = &views[index(image.get("bufferView").unwrap_or(&Value::Null), views.len())?];
@@ -311,17 +363,16 @@ pub fn precheck(data: &[u8]) -> Result<Report> {
         let size = field(view, "byteLength")? as usize;
         let mime = image.get("mimeType").and_then(Value::as_str).unwrap_or("");
         let (width, height) = image_dimensions(&binary[offset..offset + size], mime)?;
+        check(width > 0 && height > 0, "image dimensions must be nonzero")?;
         check(
-            width > 0
-                && height > 0
-                && width <= limits::IMAGE_DIMENSION
-                && height <= limits::IMAGE_DIMENSION,
-            "image dimensions exceed budget",
+            width <= limits::IMAGE_DIMENSION && height <= limits::IMAGE_DIMENSION,
+            "GLB safety limit exceeded: IMAGE_DIMENSION (16384 pixels)",
         )?;
+        max_image_dimension = max_image_dimension.max(width).max(height);
         pixels += u64::from(width) * u64::from(height);
         check(
             pixels * 4 <= limits::IMAGE_DECODED_BYTES,
-            "decoded image budget exceeded",
+            "GLB safety limit exceeded: IMAGE_DECODED_BYTES (4 GiB)",
         )?;
     }
     Ok(Report {
@@ -330,6 +381,8 @@ pub fn precheck(data: &[u8]) -> Result<Report> {
         indices,
         nodes: nodes.len(),
         image_pixels: pixels,
+        max_image_dimension,
+        image_decoded_bytes: pixels * 4,
         meshes: meshes.len(),
     })
 }
@@ -343,12 +396,12 @@ fn node_height(
 ) -> Result<usize> {
     check(
         depth <= limits::NODE_DEPTH && !active[i],
-        "cyclic or excessive node hierarchy",
+        "cyclic node hierarchy or safety limit exceeded: NODE_DEPTH",
     )?;
     if let Some(height) = heights[i] {
         check(
             depth + height <= limits::NODE_DEPTH,
-            "node hierarchy depth exceeded",
+            "GLB safety limit exceeded: NODE_DEPTH",
         )?;
         return Ok(height);
     }

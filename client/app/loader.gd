@@ -120,7 +120,9 @@ func _import(root: String, asset: Dictionary) -> void:
 	var started := Time.get_ticks_usec()
 	var result := _read_asset(root, asset)
 	if not result.has("error") and parse_in_worker:
+		var metrics: Dictionary = result.metrics
 		result = prepare(result.bytes)
+		result.metrics = metrics
 	result.seconds = (Time.get_ticks_usec() - started) / 1000000.0
 	result.worker_task = WorkerThreadPool.get_caller_task_id()
 	_publish(asset.sha256, result)
@@ -135,8 +137,8 @@ func _read_asset(root: String, asset: Dictionary) -> Dictionary:
 		return failure(
 			"asset_read_failed", "Cannot open asset: " + str(FileAccess.get_open_error())
 		)
-	if file.get_length() > Core.config().limits.glb_bytes:
-		return failure("asset_budget", "Asset exceeds byte budget")
+	if file.get_length() > Core.config().limits.safety.glb_bytes:
+		return failure("asset_budget", "Asset exceeds safety limit: GLB_BYTES")
 	var bytes := file.get_buffer(file.get_length())
 	file.close()
 	var inspected := Core.invoke("glb.inspect", bytes)
@@ -147,7 +149,7 @@ func _read_asset(root: String, asset: Dictionary) -> Dictionary:
 	)
 	if not matches.ok:
 		return failure(matches.error.code, Core.message(matches))
-	return {"bytes": bytes}
+	return {"bytes": bytes, "metrics": inspected.value.metrics}
 
 
 static func prepare(bytes: PackedByteArray) -> Dictionary:

@@ -121,6 +121,7 @@ def verify(addon, output):
             "id": "hidden",
             "entry": {"kind": "object", "name": root.name},
             "asset_path": "runtime/hidden.glb",
+            "lod1_path": "runtime/hidden.lod1.glb",
         },
         {
             "source_root": str(output),

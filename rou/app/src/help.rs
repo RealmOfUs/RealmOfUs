@@ -194,7 +194,7 @@ pub const BUILD: &str = "Build from a frozen snapshot of working files by defaul
     the Git index with --staged. Reuse matching per-model records and assets; export \
     changed model inputs through Blender. Required cold LFS payloads may be fetched. \
     The build covers the logical world, not just the local sparse selection.\n\n\
-    Write runtime/<model>.glb and runtime/<model>.json to the WORKTREE in both modes, \
+    Write runtime/<model>.glb, runtime/<model>.lod1.glb and runtime/<model>.json to the WORKTREE in both modes, \
     remove obsolete runtime outputs, and report generated/reused/removed files; --json emits the full report. \
     Never stage files or commit; explicitly rou add the intended inputs and outputs. \
     Resolve author-input conflicts first; stale or conflicted runtime outputs can be rebuilt.\n\n\

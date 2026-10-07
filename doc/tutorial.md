@@ -1,6 +1,6 @@
 # Tutorial: a realm from scratch to a two-author merge
 
-This walkthrough exercises every core feature with the CC0 calibration sample: creating a realm, building and committing, exporting a browse bundle, cloning with a region selection, two authors working in parallel, merging without rebuilding, and inspecting the result. Every command below was run as written on the current tree; the scripted "edit" steps stand in for interactive Blender sessions, which are covered at the end.
+This walkthrough exercises the core authoring workflow with the CC0 calibration sample: creating a realm, building and committing, exporting a browse bundle, cloning with a region selection, two authors working in parallel, merging without rebuilding, and inspecting the result. Validation coverage and replay dates are recorded in [Current status](status.md); the scripted "edit" steps stand in for interactive Blender sessions, which are covered at the end.
 
 ## 0. Prerequisites
 
@@ -57,10 +57,13 @@ sources/shared/ornament.blend
 
 ## 2. Build, stage, commit
 
-`rou build` freezes the saved sources, runs headless Blender once per source file, and writes `runtime/<model>.glb` plus a build record `runtime/<model>.json`. It never stages anything.
+`rou build` freezes the saved sources, runs headless Blender once per source file, and writes `runtime/<model>.glb`, `runtime/<model>.lod1.glb` and the build record `runtime/<model>.json`. It never stages anything.
 
 ```bash
 rou build          # Built 4 models (bench, far_tree, house, plaque); reused 0; outputs written to runtime/, nothing staged
+# Example statistics for house; the build prints both tiers for all four models:
+#   house asset: 5620 bytes, 72 vertices, 108 indices, 4 nodes, max image 16 px, decoded 1024 bytes
+#   house lod1: 5620 bytes, 72 vertices, 108 indices, 4 nodes, max image 16 px, decoded 1024 bytes
 rou status         # everything still untracked
 rou add .
 rou commit -m "Create the shared garden"
@@ -250,3 +253,11 @@ After `commit`, `switch` or `merge` the session is stale; reopen the project. De
 ```bash
 rm -rf /tmp/realm-tutorial
 ```
+
+Build output also prints a statistics line for each generated full and lod1 GLB;
+exact counts depend on the Blender version and source. A `warning:` line marks
+an advisory reference exceedance, not a failed build. For machine-readable
+measurements use `rou --json build` and its per-model `metrics` and `warnings`.
+Each model now produces `runtime/<model>.glb`, `runtime/<model>.lod1.glb` and
+`runtime/<model>.json`; stage both assets with the record. Existing 0.1 build
+records and browse catalogs need regeneration.

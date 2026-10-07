@@ -101,45 +101,50 @@ impl Repository {
             if !selected.contains(&entity.id) {
                 continue;
             }
-            if !provided.contains(&entity.asset.sha256) {
-                let descriptor = entity.asset.descriptor();
-                let working = validated.snapshot.working_path(&entity.asset.path)?;
-                let local = working.is_file()
-                    && working.metadata()?.len() == descriptor.bytes
-                    && validated.snapshot.hash_working_file(&working)? == descriptor;
-                let source = if local {
-                    working
-                } else {
-                    match validated
-                        .snapshot
-                        .payload_path(&entity.asset.path, &descriptor, fetch)
-                    {
-                        Ok(path) => path,
-                        Err(error)
-                            if !fetch && error.downcast_ref::<MissingPayload>().is_some() =>
+            for asset in [&entity.asset, &entity.lod1] {
+                if !provided.contains(&asset.sha256) {
+                    let descriptor = asset.descriptor();
+                    let working = validated.snapshot.working_path(&asset.path)?;
+                    let local = working.is_file()
+                        && working.metadata()?.len() == descriptor.bytes
+                        && validated.snapshot.hash_working_file(&working)? == descriptor;
+                    let source = if local {
+                        working
+                    } else {
+                        match validated
+                            .snapshot
+                            .payload_path(&asset.path, &descriptor, fetch)
                         {
-                            continue;
+                            Ok(path) => path,
+                            Err(error)
+                                if !fetch && error.downcast_ref::<MissingPayload>().is_some() =>
+                            {
+                                continue;
+                            }
+                            Err(error) => return Err(error),
                         }
-                        Err(error) => return Err(error),
+                    };
+                    let destination = temporary.path().join(paths::object(&asset.sha256));
+                    if !local || fs::hard_link(&source, &destination).is_err() {
+                        fs::copy(&source, &destination)?;
                     }
-                };
-                let destination = temporary.path().join(paths::object(&entity.asset.sha256));
-                if !local || fs::hard_link(&source, &destination).is_err() {
-                    fs::copy(&source, &destination)?;
+                    // Verify the published inode or copy, not only the earlier source snapshot.
+                    let bytes = io::read(&destination, limits::GLB_BYTES)?;
+                    descriptor.verify(&bytes)?;
+                    glb::precheck(&bytes)?;
+                    provided.insert(asset.sha256.clone());
                 }
-                // Verify the published inode or copy, not only the earlier source snapshot.
-                let bytes = io::read(&destination, limits::GLB_BYTES)?;
-                descriptor.verify(&bytes)?;
-                glb::precheck(&bytes)?;
-                provided.insert(entity.asset.sha256.clone());
             }
         }
+
         let included: BTreeSet<_> = validated
             .view
             .entities
             .iter()
             .filter(|entity| {
-                selected.contains(&entity.id) && provided.contains(&entity.asset.sha256)
+                selected.contains(&entity.id)
+                    && provided.contains(&entity.asset.sha256)
+                    && provided.contains(&entity.lod1.sha256)
             })
             .map(|entity| entity.id.clone())
             .collect();
@@ -154,7 +159,9 @@ impl Repository {
             .view
             .entities
             .iter()
-            .filter(|entity| provided.contains(&entity.asset.sha256))
+            .filter(|entity| {
+                provided.contains(&entity.asset.sha256) && provided.contains(&entity.lod1.sha256)
+            })
             .map(|entity| &validated.world.entities[&entity.id].model)
             .collect::<BTreeSet<_>>()
             .len();

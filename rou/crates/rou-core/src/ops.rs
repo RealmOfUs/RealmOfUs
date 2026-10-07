@@ -15,7 +15,7 @@
 //! | `glb.precheck` | Complete GLB | [`glb::Report`] |
 //! | `glb.inspect` | Complete GLB | `{metrics, descriptor}` |
 //! | `lfs.pointer` | Pointer or payload bytes | Pointer [`Descriptor`], or `null` for a non-pointer |
-//! | `config` | Ignored; empty bytes allowed | ABI, profile, viewer defaults and limits, host read budgets, format/path constants |
+//! | `config` | Ignored; empty bytes allowed | ABI, profile, viewer defaults, limits.safety, limits.reference and format/path constants |
 //!
 //! # JSON request operations
 //!
@@ -33,7 +33,7 @@
 //! | `realm.validate` / `model.validate` / `entity.validate` | [`Realm`] / [`Model`] / [`Entity`] | Validated document |
 //! | `manifest.validate` | [`Manifest`] | Fully validated catalog |
 //! | `world.metadata` | [`World`] | `true` after metadata validation, without requiring cold input descriptors |
-//! | `preview.create` | `{profile, entities}`; entities have id, optional label, position_mm, bounds_mm, asset | [`Manifest`] with derived owners, offsets and index |
+//! | `preview.create` | `{profile, entities}`; entities have id, optional label, position_mm, bounds_mm, asset, lod1 | [`Manifest`] with derived owners, offsets and index |
 //! | `build.validate` | `{profile, model, inputs, record}` | Record after [`Build::validate`] |
 //! | `build.input_digest` | `{profile, model, inputs}` | [`input_digest`] string |
 //! | `version.validate` | `{version, catalog}`, catalog is the raw catalog text string | Sidecar after [`Version::validate`] |
@@ -189,6 +189,7 @@ struct PreviewDraft {
     position_mm: [i64; 3],
     bounds_mm: Bounds,
     asset: Asset,
+    lod1: Asset,
 }
 
 /// Dispatch an operation and return its JSON-encoded result without a response envelope.
@@ -332,6 +333,7 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
                     offset_mm,
                     bounds_mm: entity.bounds_mm,
                     asset: entity.asset,
+                    lod1: entity.lod1,
                 });
             }
             entities.sort_by(|a, b| a.id.cmp(&b.id));
@@ -455,16 +457,49 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
         "config" => json!({
             "abi_version": formats::ABI_VERSION,
             "profile": Profile::default(),
+            "lod1": {
+                "ratio": limits::LOD1_RATIO,
+                "min_triangles": limits::LOD1_MIN_TRIANGLES,
+                "image_dimension": limits::LOD1_IMAGE_DIMENSION
+            },
             "viewer": {
                 "radii": crate::viewer::default_radii(), "hysteresis": limits::VIEW_HYSTERESIS,
                 "max_radius": limits::VIEW_COORDINATE_METRES,
                 "max_retention": limits::VIEW_RETENTION_METRES
             },
             "limits": {
-                "json_bytes": limits::JSON_BYTES,
-                "glb_bytes": limits::GLB_BYTES,
-                "file_bytes": limits::FILE_BYTES,
-                "pointer_bytes": limits::POINTER_BYTES
+                "safety": {
+                    "json_bytes": limits::JSON_BYTES,
+                    "json_depth": limits::JSON_DEPTH,
+                    "glb_bytes": limits::GLB_BYTES,
+                    "glb_json_bytes": limits::GLB_JSON_BYTES,
+                    "file_bytes": limits::FILE_BYTES,
+                    "pointer_bytes": limits::POINTER_BYTES,
+                    "vertices": limits::VERTICES,
+                    "indices": limits::INDICES,
+                    "nodes": limits::NODES,
+                    "node_depth": limits::NODE_DEPTH,
+                    "glb_array_items": limits::GLB_ARRAY_ITEMS,
+                    "image_dimension": limits::IMAGE_DIMENSION,
+                    "image_decoded_bytes": limits::IMAGE_DECODED_BYTES,
+                    "coordinate_mm": limits::COORDINATE_MM,
+                    "view_coordinate_metres": limits::VIEW_COORDINATE_METRES,
+                    "view_retention_metres": limits::VIEW_RETENTION_METRES,
+                    "chunk_size_mm": limits::CHUNK_SIZE_MM,
+                    "world_chunks": limits::WORLD_CHUNKS,
+                    "entity_chunks": limits::ENTITY_CHUNKS,
+                    "world_records": limits::WORLD_RECORDS,
+                    "dependencies": limits::DEPENDENCIES,
+                    "dependency_depth": limits::DEPENDENCY_DEPTH,
+                    "id_bytes": limits::ID_BYTES,
+                    "label_chars": limits::LABEL_CHARS
+                },
+                "reference": {
+                    "glb_warn_bytes": limits::GLB_WARN_BYTES,
+                    "vertices_warn": limits::VERTICES_WARN,
+                    "image_warn_dimension": limits::IMAGE_WARN_DIMENSION,
+                    "image_decoded_warn_bytes": limits::IMAGE_DECODED_WARN_BYTES
+                }
             },
             "formats": {
                 "realm": formats::REALM, "model": formats::MODEL,

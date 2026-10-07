@@ -15,7 +15,7 @@ There is one implementation, so no JSON Schema is maintained and no cross-implem
 
 ## Format identifiers
 
-Every JSON document carries a `format` field of the form `name/major.minor`. Readers accept only identifiers they know. The complete list and meaning are in [repository.md § Format identifiers](repository.md#format-identifiers): `rou-realm/0.1`, `rou-model/0.1`, `rou-entity/0.1`, `rou-build/0.1`, `rou-blender-export/0.1`, `rou-view/0.1`, `rou-preview/0.1`, `rou-git-view/0.1`. Incompatible changes bump the minor version and regenerate data.
+Every JSON document carries a `format` field of the form `name/major.minor`. Readers accept only identifiers they know. The complete list and meaning are in [repository.md § Format identifiers](repository.md#format-identifiers): `rou-realm/0.1`, `rou-model/0.1`, `rou-entity/0.1`, `rou-build/0.2`, `rou-blender-export/0.2`, `rou-view/0.1`, `rou-preview/0.2`, `rou-git-view/0.1`. Incompatible changes bump the minor version and regenerate data.
 
 ## Change rules
 

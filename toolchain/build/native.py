@@ -49,12 +49,12 @@ def validate_bundle(path: Path, core=None) -> dict:
     manifest = core.read_json(path, "manifest.validate")
     checked = set()
     for entity in manifest["entities"]:
-        asset = entity["asset"]
-        if asset["sha256"] not in checked:
-            raw = core.read_bytes(path.parent / asset["path"], core.LIMITS["glb_bytes"])
-            actual = core.call("glb.inspect", raw)
-            core.call("asset.match", {"asset": asset, "actual": actual["descriptor"]})
-            checked.add(asset["sha256"])
+        for asset in [entity["asset"], entity["lod1"]]:
+            if asset["sha256"] not in checked:
+                raw = core.read_bytes(path.parent / asset["path"], core.LIMITS["glb_bytes"])
+                actual = core.call("glb.inspect", raw)
+                core.call("asset.match", {"asset": asset, "actual": actual["descriptor"]})
+                checked.add(asset["sha256"])
     version = path.parent / "version.json"
     if version.exists():
         core.call(

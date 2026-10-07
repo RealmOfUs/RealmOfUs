@@ -7,7 +7,7 @@ use crate::{
 use bstr::BString;
 use rou_core::{
     blender,
-    documents::{Asset, BlenderExport, Build, Descriptor},
+    documents::{BlenderExport, Build, Descriptor, ExportMetrics},
     formats, glb, json, limits, paths,
     selection::Selection,
     world::World,
@@ -32,6 +32,10 @@ pub struct BuildReport {
     pub generated: Vec<String>,
     /// Model IDs whose current build records were reused.
     pub reused: Vec<String>,
+    /// Verified full and middle-detail statistics for generated models only.
+    pub metrics: BTreeMap<String, ExportMetrics>,
+    /// Advisory reference exceedances per generated model; never validation failures.
+    pub warnings: BTreeMap<String, Vec<String>>,
     /// Retained build-run directory, or `None` when successful runs are not retained.
     pub run: Option<PathBuf>,
     /// All expected runtime asset and build-record paths after the build.
@@ -235,16 +239,28 @@ impl Repository {
             }
         }
         let mut generated = Vec::new();
+        let mut metrics = BTreeMap::new();
+        let mut warnings = BTreeMap::new();
         let mut reused = Vec::new();
         let mut outputs: BTreeMap<String, PathBuf> = BTreeMap::new();
         for (group, (source, ids)) in groups.into_iter().enumerate() {
             let folder = run.join(format!("source-{group:04}"));
             let exported = export_source(&snapshot, &world, source, &ids, &folder)?;
-            for (id, record) in exported {
-                outputs.insert(
-                    record.asset.path.clone(),
-                    folder.join("output").join(&record.asset.path),
-                );
+            for (id, (record, sizes)) in exported {
+                for asset in [&record.asset, &record.lod1] {
+                    outputs.insert(asset.path.clone(), folder.join("output").join(&asset.path));
+                }
+                let notes: Vec<_> = [("asset", &sizes.asset), ("lod1", &sizes.lod1)]
+                    .into_iter()
+                    .flat_map(|(tier, report)| {
+                        report
+                            .warnings()
+                            .into_iter()
+                            .map(move |note| format!("{tier}: {note}"))
+                    })
+                    .collect();
+                warnings.insert(id.clone(), notes);
+                metrics.insert(id.clone(), sizes);
                 generated.push(id.clone());
                 records.insert(id, record);
             }
@@ -255,48 +271,48 @@ impl Repository {
             if generated.contains(id) {
                 continue;
             }
-            let path = &record.asset.path;
-            let wanted = record.asset.descriptor();
-            // A matching pointer is a complete reusable output. Do not fetch or
-            // materialize cold assets merely to reuse their build metadata.
-            let destination = snapshot.working_path(path)?;
-            let intact = destination.is_file()
-                && !snapshot.conflicts.contains_key(path.as_bytes())
-                && snapshot
-                    .working_descriptor(path)
-                    .is_ok_and(|actual| actual == wanted);
-            if intact {
-                reused.push(id.clone());
-                continue;
-            }
-            if sparse.stdout.starts_with(b"true") && !selected.contains(path) {
-                ensure!(
-                    "stale_runtime",
-                    !destination.exists()
-                        && snapshot.skipped.contains(path.as_bytes())
-                        && snapshot.entries.get(path.as_bytes()).is_some_and(|entry| {
-                            snapshot
-                                .read_entry(entry, limits::POINTER_BYTES)
-                                .ok()
-                                .and_then(|bytes| rou_core::lfs::pointer(&bytes).ok().flatten())
-                                .as_ref()
-                                == Some(&wanted)
-                        })
-                        && !snapshot.conflicts.contains_key(path.as_bytes()),
-                    "select the entity before repairing its runtime output: {path}"
-                );
-                reused.push(id.clone());
-                continue;
-            }
-            // Repair selected missing, conflicted or stale outputs only.
-            let output = snapshot.payload_path(path, &wanted, true)?;
-            let bytes = io::read(&output, limits::GLB_BYTES)?;
-            wanted.verify(&bytes)?;
-            glb::precheck(&bytes)?;
-            if output != destination {
-                let frozen = run.join("reused").join(path);
-                io::atomic_write(&frozen, &bytes)?;
-                outputs.insert(path.clone(), frozen);
+            for asset in [&record.asset, &record.lod1] {
+                let path = &asset.path;
+                let wanted = asset.descriptor();
+                // A matching pointer is a complete reusable output. Do not fetch or
+                // materialize cold assets merely to reuse their build metadata.
+                let destination = snapshot.working_path(path)?;
+                let intact = destination.is_file()
+                    && !snapshot.conflicts.contains_key(path.as_bytes())
+                    && snapshot
+                        .working_descriptor(path)
+                        .is_ok_and(|actual| actual == wanted);
+                if intact {
+                    continue;
+                }
+                if sparse.stdout.starts_with(b"true") && !selected.contains(path) {
+                    ensure!(
+                        "stale_runtime",
+                        !destination.exists()
+                            && snapshot.skipped.contains(path.as_bytes())
+                            && snapshot.entries.get(path.as_bytes()).is_some_and(|entry| {
+                                snapshot
+                                    .read_entry(entry, limits::POINTER_BYTES)
+                                    .ok()
+                                    .and_then(|bytes| rou_core::lfs::pointer(&bytes).ok().flatten())
+                                    .as_ref()
+                                    == Some(&wanted)
+                            })
+                            && !snapshot.conflicts.contains_key(path.as_bytes()),
+                        "select the entity before repairing its runtime output: {path}"
+                    );
+                    continue;
+                }
+                // Repair selected missing, conflicted or stale outputs only.
+                let output = snapshot.payload_path(path, &wanted, true)?;
+                let bytes = io::read(&output, limits::GLB_BYTES)?;
+                wanted.verify(&bytes)?;
+                glb::precheck(&bytes)?;
+                if output != destination {
+                    let frozen = run.join("reused").join(path);
+                    io::atomic_write(&frozen, &bytes)?;
+                    outputs.insert(path.clone(), frozen);
+                }
             }
             reused.push(id.clone());
         }
@@ -306,6 +322,7 @@ impl Repository {
         let mut expected = BTreeSet::new();
         for id in records.keys() {
             expected.insert(paths::asset(id));
+            expected.insert(paths::lod1(id));
             expected.insert(paths::build(id));
         }
         let runtime = io::destination(&self.root, b"runtime")?;
@@ -369,6 +386,8 @@ impl Repository {
             mode: snapshot.mode.label().to_lowercase(),
             generated,
             reused,
+            metrics,
+            warnings,
             run: (options.keep_build_runs != 0).then(|| run.clone()),
             outputs: expected.into_iter().collect(),
             removed: obsolete,
@@ -393,6 +412,7 @@ fn preflight_records(
         let path = paths::build(id);
         let file = snapshot.working_path(&path)?;
         snapshot.working_path(&paths::asset(id))?;
+        snapshot.working_path(&paths::lod1(id))?;
         if !sparse || file.is_file() || snapshot.skipped.contains(path.as_bytes()) {
             continue;
         }
@@ -450,7 +470,7 @@ fn export_source(
     source: &str,
     ids: &[&str],
     folder: &Path,
-) -> Result<BTreeMap<String, Build>> {
+) -> Result<BTreeMap<String, (Build, ExportMetrics)>> {
     let inputs = folder.join("inputs");
     let output = folder.join("output");
     fs::create_dir_all(&inputs)?;
@@ -487,6 +507,7 @@ fn export_source(
                 "id": id,
                 "entry": world.models[*id].entry,
                 "asset_path": paths::asset(id),
+                "lod1_path": paths::lod1(id),
                 "entity_ids": entity_ids,
             })
         })
@@ -555,26 +576,34 @@ fn export_source(
                 "undeclared Blender dependency: {dependency}"
             );
         }
-        let data = io::read(
-            &io::destination(&output, exported.path.as_bytes())?,
-            limits::GLB_BYTES,
-        )?;
-        glb::precheck(&data)?;
+        for (asset, metrics) in [
+            (&exported.asset, &exported.metrics.asset),
+            (&exported.lod1, &exported.metrics.lod1),
+        ] {
+            let data = io::read(
+                &io::destination(&output, asset.path.as_bytes())?,
+                limits::GLB_BYTES,
+            )?;
+            asset.descriptor().verify(&data)?;
+            ensure!(
+                "invalid_export",
+                glb::precheck(&data)? == *metrics,
+                "export statistics differ from GLB: {}",
+                asset.path
+            );
+        }
         let record = Build {
             format: formats::BUILD.into(),
             model: model.id.clone(),
             inputs: world.inputs[&model.id].clone(),
             input_digest: world.input_digest(&model.id)?,
-            asset: Asset {
-                path: exported.path,
-                sha256: json::digest(&data),
-                bytes: data.len() as u64,
-            },
+            asset: exported.asset,
+            lod1: exported.lod1,
             local_bounds_mm: blender::bounds_native(exported.bounds_blender_m)?,
             tool_versions: Some(response.tool_versions.clone()),
         };
         record.validate(&world.realm.profile, model, &world.inputs[&model.id])?;
-        result.insert(model.id.clone(), record);
+        result.insert(model.id.clone(), (record, exported.metrics));
     }
     Ok(result)
 }

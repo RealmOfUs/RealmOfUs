@@ -69,7 +69,7 @@ static func read(path: String, ref: String = "") -> Dictionary:
 	var error := check_layout(path)
 	if not error.is_empty():
 		return {"error": error}
-	var bytes := read_bytes(path, config.limits.json_bytes)
+	var bytes := read_bytes(path, config.limits.safety.json_bytes)
 	if bytes.has("error"):
 		return bytes
 	var parsed := Core.invoke("manifest.validate", bytes.bytes)
@@ -79,7 +79,7 @@ static func read(path: String, ref: String = "") -> Dictionary:
 	var version: Dictionary = {}
 	var sidecar := path.get_base_dir().path_join(config.paths.version)
 	if FileAccess.file_exists(sidecar):
-		var stored := read_bytes(sidecar, config.limits.json_bytes)
+		var stored := read_bytes(sidecar, config.limits.safety.json_bytes)
 		if stored.has("error"):
 			return stored
 		var decoded := Core.invoke("json.strict", stored.bytes)

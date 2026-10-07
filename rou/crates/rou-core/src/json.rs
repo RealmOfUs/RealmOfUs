@@ -140,7 +140,22 @@ pub fn parse<T: DeserializeOwned>(data: &[u8]) -> Result<T> {
 ///
 /// Return `invalid_json` if the target type or its shape constraints do not match.
 pub fn from_value<T: DeserializeOwned>(value: Value) -> Result<T> {
-    Ok(serde_json::from_value(value)?)
+    // Keep only the retired identifier for diagnostics, never a legacy schema reader.
+    let current = match value.get("format").and_then(Value::as_str) {
+        Some("rou-build/0.1") => Some(crate::formats::BUILD),
+        Some("rou-preview/0.1") => Some(crate::formats::PREVIEW),
+        Some("rou-blender-export/0.1") => Some(crate::formats::BLENDER_EXPORT),
+        _ => None,
+    };
+    serde_json::from_value(value).map_err(|error| match current {
+        Some(format) => crate::Error::new(
+            "invalid_json",
+            format!(
+                "document predates {format}; regenerate with rou build and rou view, then open the new revision"
+            ),
+        ),
+        None => error.into(),
+    })
 }
 /// Encode a serializable value under RFC 8785 as UTF-8 bytes without a trailing newline.
 ///

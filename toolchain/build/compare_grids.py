@@ -20,7 +20,7 @@ def with_grid(manifest: dict, edge_m: int, core=None) -> dict:
                 {
                     key: value
                     for key, value in entity.items()
-                    if key in {"id", "label", "position_mm", "bounds_mm", "asset"}
+                    if key in {"id", "label", "position_mm", "bounds_mm", "asset", "lod1"}
                 }
                 for entity in manifest["entities"]
             ],
@@ -30,7 +30,10 @@ def with_grid(manifest: dict, edge_m: int, core=None) -> dict:
 
 def compare_grids(fixture: dict) -> list[dict]:
     core = load_core()
-    manifest = core.call("manifest.validate", fixture["manifest"])
+    # Historical geometry/position vectors stay read-only. Add only the current schema fields.
+    catalog = {**fixture["manifest"], "format": core.FORMATS["preview"]}
+    catalog["entities"] = [{**entity, "lod1": entity["asset"]} for entity in catalog["entities"]]
+    manifest = core.call("manifest.validate", catalog)
     results = []
     for edge_m in (16, 32, 64):
         variant = with_grid(manifest, edge_m, core)

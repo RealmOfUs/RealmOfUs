@@ -1,8 +1,9 @@
 """Export a group of models from one frozen .blend for the Rust build pipeline.
 
-Only bpy work lives here. The Rust caller supplies identifiers and output paths,
-checks dependency declarations, converts bounds to millimetres, hashes bytes and
-performs GLB preflight. The source is never saved by this helper.
+Scene export lives here; statistics and validation use the shared native core.
+The Rust caller supplies identifiers and output paths, checks dependencies,
+converts bounds to millimetres, and independently verifies both asset descriptors
+and GLB metrics. The source is never saved by this helper.
 """
 
 import argparse
@@ -13,6 +14,7 @@ from pathlib import Path
 import bpy
 
 sys.path.insert(0, str(Path(__file__).with_name("rou_blender")))
+import core
 from scene import export_model
 
 
@@ -27,7 +29,7 @@ def main():
             raise ValueError("Build request is missing author entity IDs")
     report = {
         "format": request["response_format"],
-        "models": [export_model(model, request) for model in request["models"]],
+        "models": [export_model(model, request, core) for model in request["models"]],
         "tool_versions": {
             "blender": bpy.app.version_string,
             "blender_build": bpy.app.build_hash.decode(),

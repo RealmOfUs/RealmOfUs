@@ -80,7 +80,7 @@ def verify_persistent_identity(addon, root, source, model_path, placement):
     request.write_text(
         json.dumps(
             {
-                "response_format": "rou-blender-export/0.1",
+                "response_format": addon.core.FORMATS["blender_export"],
                 "source_root": str(root),
                 "source": source.relative_to(root).as_posix(),
                 "output_dir": str(export_root / "rejected"),
@@ -88,6 +88,7 @@ def verify_persistent_identity(addon, root, source, model_path, placement):
                     {
                         **stale_model,
                         "asset_path": "impostor.glb",
+                        "lod1_path": "impostor.lod1.glb",
                         "entity_ids": ["model_0", "instance_two"],
                     }
                 ],
@@ -124,7 +125,12 @@ def verify_persistent_identity(addon, root, source, model_path, placement):
     model = check_entry(1)
     assert browser.SESSION.model_roots["shared_definition"] == "model_0"
     exported = addon.scene.export_model(
-        {**model, "asset_path": "identity.glb", "entity_ids": ["model_0", "instance_two"]},
+        {
+            **model,
+            "asset_path": "identity.glb",
+            "lod1_path": "identity.lod1.glb",
+            "entity_ids": ["model_0", "instance_two"],
+        },
         {
             "source_root": str(root),
             "source": source.relative_to(root).as_posix(),

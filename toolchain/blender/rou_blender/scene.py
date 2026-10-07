@@ -1,6 +1,10 @@
-"""Blender scene traversal, static-data checks, bounds and GLB export."""
+"""Blender traversal, static-data checks, bounds and geometry/texture LOD export."""
 
 import json
+import shutil
+import struct
+import uuid
+from array import array
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -252,7 +256,196 @@ def export_glb(path):
     )
 
 
-def export_model(model, request):
+@contextmanager
+def lod1_materials(materials, image_dimension):
+    """Resize private image copies and remap only affected materials and node groups."""
+    images, copies, groups, affected = {}, {}, {}, {}
+    author_names = {material.name for material in bpy.data.materials}
+
+    def needs_copy(tree):
+        if tree not in affected:
+            affected[tree] = False
+            affected[tree] = any(
+                (node.type == "TEX_IMAGE" and node.image in images)
+                or (node.type == "GROUP" and node.node_tree and needs_copy(node.node_tree))
+                for node in tree.nodes
+            )
+        return affected[tree]
+
+    def remap(tree):
+        for node in tree.nodes:
+            if node.type == "TEX_IMAGE" and node.image in images:
+                node.image = images[node.image]
+            elif node.type == "GROUP" and node.node_tree and needs_copy(node.node_tree):
+                original = node.node_tree
+                if original not in groups:
+                    groups[original] = original.copy()
+                    remap(groups[original])
+                node.node_tree = groups[original]
+
+    try:
+        for original in dependency_closure(materials):
+            if not isinstance(original, bpy.types.Image) or max(original.size) <= image_dimension:
+                continue
+            image = original.copy()
+            images[original] = image
+            if original.source == "FILE":
+                image.filepath = bpy.path.abspath(original.filepath, library=original.library)
+            # Image.copy can reload disk/packed pixels instead of copying live paint edits.
+            if original.is_dirty or original.source == "GENERATED":
+                pixels = array("f", [0.0]) * len(original.pixels)
+                original.pixels.foreach_get(pixels)
+                image.pixels.foreach_set(pixels)
+                del pixels
+            require(min(image.size) > 0 and image.has_data, f"Image copy missing: {original.name}")
+            longest = max(original.size)
+            size = [max(1, round(edge * image_dimension / longest)) for edge in original.size]
+            image.scale(*size)
+            image.pack()
+        for original in materials:
+            if original.node_tree and needs_copy(original.node_tree):
+                copies[original] = original.copy()
+                # Linked libraries have separate name spaces; avoid ambiguous exported names.
+                while True:
+                    name = "rou_lod1_" + uuid.uuid4().hex
+                    if name not in author_names:
+                        break
+                copies[original].name = name
+                remap(copies[original].node_tree)
+        yield copies
+    finally:
+        for material in copies.values():
+            bpy.data.materials.remove(material, do_unlink=True)
+        for group in groups.values():
+            bpy.data.node_groups.remove(group, do_unlink=True)
+        for image in images.values():
+            bpy.data.images.remove(image, do_unlink=True)
+
+
+def restore_material_names(path, materials):
+    """Restore exported names without renaming author IDs, including linked materials.
+
+    Only the generated JSON chunk changes; stream the BIN chunk without re-encoding.
+    Hashes and metrics are computed after this step by the caller.
+    """
+    if not materials:
+        return
+    names = {copy.name: original.name for original, copy in materials.items()}
+    temporary = path.with_suffix(".names.glb")
+    try:
+        with path.open("rb") as source, temporary.open("wb") as target:
+            magic, version, total, length, kind = struct.unpack("<5I", source.read(20))
+            document = json.loads(source.read(length))
+            for material in document.get("materials", []):
+                if material.get("name") in names:
+                    material["name"] = names[material["name"]]
+            chunk = json.dumps(document, separators=(",", ":"), ensure_ascii=False).encode()
+            chunk += b" " * (-len(chunk) % 4)
+            target.write(
+                struct.pack("<5I", magic, version, total - length + len(chunk), len(chunk), kind)
+            )
+            target.write(chunk)
+            shutil.copyfileobj(source, target)
+        temporary.replace(path)
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def export_lod1(objects, full_path, path, policy):
+    """Decimate each shared evaluated mesh once, preserving effective material slots.
+
+    Core policy defines the mesh threshold, triangle ratio and maximum image edge.
+    Copy the full GLB only when both geometry and images need no reduction.
+    Images, affected materials and nested node groups are copied before resampling.
+    Empty nodes are omitted and their transforms baked into the mesh instances.
+    Evaluated mesh identity keeps different modifier results separate without a
+    partial modifier signature that could merge unequal geometry. Author data is
+    never modified.
+    """
+    graph = bpy.context.evaluated_depsgraph_get()
+    selected = set(objects)
+    meshes = []
+    frozen = {}
+    placements = []
+    copies = []
+    collection = None
+    try:
+        for instance in graph.object_instances:
+            original = instance.object.original
+            parent = instance.parent.original if instance.parent else None
+            if original not in selected and (not instance.is_instance or parent not in selected):
+                continue
+            if instance.object.type != "MESH":
+                continue
+            materials = tuple(
+                slot.material.original if slot.material else None
+                for slot in instance.object.material_slots
+            )
+            key = (instance.object.data.as_pointer(), materials)
+            if key not in frozen:
+                mesh = bpy.data.meshes.new_from_object(
+                    instance.object, preserve_all_data_layers=True, depsgraph=graph
+                )
+                meshes.append(mesh)
+                # Original IDs outlive depsgraph updates; evaluated material IDs do not.
+                for index, material in enumerate(materials):
+                    mesh.materials[index] = material
+                triangles = sum(len(polygon.vertices) - 2 for polygon in mesh.polygons)
+                frozen[key] = (mesh, triangles)
+            placements.append((key, instance.matrix_world.copy()))
+        require(meshes, "Entry has no mesh geometry")
+        materials = {material for _, slots in frozen for material in slots if material}
+        with lod1_materials(materials, policy["image_dimension"]) as replacements:
+            if not replacements and not any(
+                triangles >= policy["min_triangles"] for _, triangles in frozen.values()
+            ):
+                shutil.copyfile(full_path, path)
+                return
+            for mesh, _ in frozen.values():
+                for index, material in enumerate(mesh.materials):
+                    if material in replacements:
+                        mesh.materials[index] = replacements[material]
+            collection = bpy.data.collections.new("rou_lod1_temporary")
+            bpy.context.scene.collection.children.link(collection)
+            simplified = {}
+            for key, matrix in placements:
+                mesh, triangles = frozen[key]
+                mesh = simplified.get(key, mesh)
+                obj = bpy.data.objects.new(mesh.name + "_lod1", mesh)
+                collection.objects.link(obj)
+                obj.matrix_world = matrix
+                copies.append(obj)
+                if key not in simplified and triangles >= policy["min_triangles"]:
+                    modifier = obj.modifiers.new("rou_lod1", "DECIMATE")
+                    modifier.ratio = policy["ratio"]
+                    modifier.use_collapse_triangulate = True
+                    with export_visibility([obj]):
+                        bpy.ops.object.modifier_apply(modifier=modifier.name)
+                    if obj.data != mesh:
+                        meshes.append(obj.data)
+                simplified[key] = obj.data
+            with export_visibility(copies):
+                export_glb(path)
+            restore_material_names(path, replacements)
+    finally:
+        for obj in copies:
+            bpy.data.objects.remove(obj, do_unlink=True)
+        if collection is not None:
+            bpy.data.collections.remove(collection)
+        for mesh in meshes:
+            bpy.data.meshes.remove(mesh)
+        bpy.context.view_layer.update()
+
+
+def describe_glb(path, relative, core):
+    """Delegate all output statistics, hashing and safety validation to the native core."""
+    result = core.call("glb.inspect", core.read_bytes(path, core.LIMITS["glb_bytes"]))
+    return {"path": relative, **result["descriptor"]}, result["metrics"]
+
+
+def export_model(model, request, core=None):
+    if core is None:
+        from . import core
     # Direct preview callers have no Git entity mapping. The build helper must
     # supply it so a native Blender save cannot bypass the registration check.
     if "entity_ids" in model:
@@ -265,6 +458,8 @@ def export_model(model, request):
     locations = [(root, root.location.copy()) for root in roots]
     path = Path(request["output_dir"]) / model["asset_path"]
     path.parent.mkdir(parents=True, exist_ok=True)
+    lod1_relative = model["lod1_path"]
+    lod1_path = Path(request["output_dir"]) / lod1_relative
     try:
         for root, _ in locations:
             root.location = (0, 0, 0)
@@ -272,13 +467,18 @@ def export_model(model, request):
         with export_visibility(objects):
             bounds = local_bounds(objects)
             export_glb(path)
+            export_lod1(objects, path, lod1_path, core.CONFIG["lod1"])
     finally:
         for root, location in locations:
             root.location = location
         bpy.context.view_layer.update()
+    asset, full_metrics = describe_glb(path, model["asset_path"], core)
+    lod1, lod1_metrics = describe_glb(lod1_path, lod1_relative, core)
     return {
         "id": model["id"],
-        "path": model["asset_path"],
+        "asset": asset,
+        "lod1": lod1,
+        "metrics": {"asset": full_metrics, "lod1": lod1_metrics},
         "bounds_blender_m": bounds,
         "dependencies": dependencies,
     }

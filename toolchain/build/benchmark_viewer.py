@@ -71,7 +71,7 @@ def run(command, report, seconds=30, user_args=None, json_output=False, activate
     if proc.returncode or not report.exists() or "ERROR:" in log.read_text():
         raise RuntimeError("Viewer failed: " + str(log))
     data = json.loads(report.read_text())
-    if data.get("rejected") or data.get("frames", 0) == 0:
+    if data.get("rejected") or data.get("asset_failures") or data.get("frames", 0) == 0:
         raise RuntimeError("Viewer did not complete a usable measurement: " + str(log))
     if data["mount_frames"]["count"] + data["steady_frames"]["count"] != data["frames"]:
         raise RuntimeError("Frame groups do not partition the measurement: " + str(report))

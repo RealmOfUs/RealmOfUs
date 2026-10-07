@@ -50,6 +50,7 @@ def generate(source: Path, output: Path, count: int, seed: int) -> dict:
                     end: [local[end][a] + position[a] for a in range(3)] for end in ["min", "max"]
                 },
                 "asset": model["asset"],
+                "lod1": model["lod1"],
             }
         )
     # The core derives owners, offsets, profile hash and the complete spatial index.
@@ -63,14 +64,17 @@ def generate(source: Path, output: Path, count: int, seed: int) -> dict:
     objects = output / "objects"
     objects.mkdir(exist_ok=True)
     for model in models:
-        path = model["asset"]["path"]
-        shutil.copyfile(source.parent / path, output / path)
+        for key in ["asset", "lod1"]:
+            path = model[key]["path"]
+            shutil.copyfile(source.parent / path, output / path)
     core.write_json(output / "realm.json", manifest)
     validate_bundle(output / "realm.json", core)
     return {
         "realm": str(output / "realm.json"),
         "entities": len(entities),
-        "unique_assets": len(models),
+        "unique_assets": len(
+            {model[key]["sha256"] for model in models for key in ["asset", "lod1"]}
+        ),
         "occupied_chunks": len(manifest["chunks"]),
         "impostors": len(layout["impostors"]),
         "seed": seed,

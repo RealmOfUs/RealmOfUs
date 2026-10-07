@@ -28,6 +28,7 @@ func run_checks() -> void:
 		"res://../../rou/crates/rou-core/tests/fixtures/spatial.json"
 	)
 	var vectors: Dictionary = Core.invoke("json.strict", bytes).value
+	adapt_catalog_fixture(vectors)
 	var uncatalogued := Rou.new()
 	var absent := uncatalogued.catalog_query("{}".to_utf8_buffer())
 	check(not absent.ok and absent.error.code == "missing_catalog", "Query requires a catalog")
@@ -98,3 +99,17 @@ func run_checks() -> void:
 	)
 	print("RUST_SPATIAL_PASS ", checks if errors.is_empty() else errors)
 	quit(0 if errors.is_empty() else 1)
+
+
+func adapt_catalog_fixture(value: Variant) -> void:
+	# Preserve the reviewed fixture on disk; only supply the current catalog envelope.
+	if value is Dictionary:
+		if value.get("format") == "rou-preview/0.1":
+			value.format = Core.config().formats.preview
+		if value.has("asset") and value.asset.has("path"):
+			value.lod1 = value.asset.duplicate(true)
+		for child: Variant in value.values():
+			adapt_catalog_fixture(child)
+	elif value is Array:
+		for child: Variant in value:
+			adapt_catalog_fixture(child)
