@@ -35,7 +35,7 @@ ADDON     := dist/rou_blender.zip
 
 export ROU_TOOLCHAIN_ROOT := $(ROOT)
 
-.PHONY: help all rou godot-ext ffi addon viewer examples check test test-rust test-spatial test-git test-addon bench-viewer test-forgejo forgejo-up forgejo-down forgejo-reset fuzz clean
+.PHONY: help all rou godot-ext ffi addon viewer examples check test test-rust test-spatial test-git test-addon test-detailed-display bench-viewer test-forgejo forgejo-up forgejo-down forgejo-reset fuzz clean
 
 help: ## List targets
 	@grep -E '^[a-z][a-z-]*:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  %-12s %s\n", $$1, $$2}'
@@ -94,6 +94,9 @@ test-addon: addon ## Blender extension, material-preserving LOD export and real 
 	mkdir -p build/addon-install/user/config build/addon-install/user/scripts
 	BLENDER_USER_RESOURCES="$(ROOT)/build/addon-install/user" BLENDER_USER_CONFIG="$(ROOT)/build/addon-install/user/config" BLENDER_USER_SCRIPTS="$(ROOT)/build/addon-install/user/scripts" \
 	  $(BLENDER) --background --factory-startup --python-exit-code 1 --python toolchain/tests/blender/verify_addon_install.py -- --addon-zip "$(ROOT)/$(ADDON)" --output "$(ROOT)/build/addon-install"
+
+test-detailed-display: rou godot-ext ## Capture focused full/lod1 images and verify detailed-asset release
+	$(PYTHON) toolchain/build/verify_detailed_display.py $(if $(filter macos,$(PLATFORM)),--activate,)
 
 bench-viewer: godot-ext ffi ## Display an 800-entity streaming flight for 30 seconds
 	test -f build/s1-2.1/preview/realm.json || $(BLENDER) --background --factory-startup --python-exit-code 1 --python examples/calibration/create_scene.py

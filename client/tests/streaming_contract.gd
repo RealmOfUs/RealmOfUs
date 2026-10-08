@@ -282,8 +282,21 @@ func check_distinct_lod1(
 	check(viewer.open_realm(folder), "Dual-asset bundle opens")
 	check(await Streaming.drain(viewer), "Near asset loads")
 	check(viewer.loaded_assets.sphere == full.sha256, "Near tier uses the full hash")
+	var original: Node3D = viewer.loaded.sphere
+	var before := [viewer.imports, viewer.asset_imports, viewer.unloads]
+	for height: float in [48.1, 50.3, 48.2, 50.2, 48.1]:
+		viewer.navigate_position(Vector3(0, height, 0))
+		check(viewer.queue.is_empty(), "Near hysteresis avoids replacement work in the band")
+		check(await Streaming.drain(viewer), "Hysteresis refresh stays idle")
+	check(viewer.loaded.sphere == original, "Oscillating in the band preserves the mounted scene")
+	check(
+		before == [viewer.imports, viewer.asset_imports, viewer.unloads],
+		"Oscillating in the band causes no imports or unloads"
+	)
 	viewer.navigate_position(Vector3(0, 80, 0))
 	check(viewer.loaded.has("sphere"), "Keep the previous scene during a valid tier replacement")
+	viewer.refresh_assets()
+	check(not viewer.impostors.instances.sphere.visible, "Core hides the box during replacement")
 	check(await Streaming.drain(viewer), "Middle asset loads independently")
 	check(viewer.loaded_assets.sphere == lod1.sha256, "Middle tier uses the lod1 hash")
 	check(
@@ -291,6 +304,10 @@ func check_distinct_lod1(
 		"Each SHA has its own cache entry"
 	)
 	check(not viewer.impostors.instances.sphere.visible, "Mounted lod1 hides its box")
+	viewer.navigate_position(Vector3(0, 49, 0))
+	check(viewer.queue.is_empty(), "Mounted middle tier stays middle in the same hysteresis band")
+	check(viewer.loaded_assets.sphere == lod1.sha256, "Hysteresis depends on the mounted SHA")
+	viewer.prototypes[full.sha256].used_at = Time.get_ticks_msec() / 1000.0
 	viewer.set_pose(viewer.layout.entities.sphere.focus)
 	check(await Streaming.drain(viewer), "Near asset is restored")
 	check(
@@ -319,6 +336,16 @@ func check_distinct_lod1(
 		viewer.loaded_assets.sphere == full.sha256 and viewer.rejected.is_empty(),
 		"Failures are scoped to the selected SHA"
 	)
+	viewer.set_radii([16, 4000, 4000])
+	viewer.navigate_position(Vector3(0, 4300, 0))
+	check(viewer.loaded.is_empty(), "A missing target detaches a scene in the retention band")
+	check(
+		not viewer.impostors.instances.sphere.visible,
+		"Failure-driven detachment beyond the far radius does not reveal a box"
+	)
+	viewer.set_radii([16, 64, 4000])
+	viewer.set_pose(viewer.layout.entities.sphere.focus)
+	check(await Streaming.drain(viewer), "Return near after the far-radius failure")
 	viewer.navigate_position(Vector3(0, 80, 0))
 	check(
 		viewer.loaded.is_empty() and viewer.impostors.instances.sphere.visible,
@@ -342,6 +369,51 @@ func check_distinct_lod1(
 	)
 	viewer.clear_realm()
 	write_bytes(folder.path_join(full.path), full_bytes)
+	await check_work_order(viewer, folder, bundle)
 	DirAccess.remove_absolute(folder.path_join(lod1.path))
 	bundle.entities[0].lod1 = full
 	write_bytes(folder.path_join("realm.json"), JSON.stringify(bundle).to_utf8_buffer())
+
+
+func check_work_order(viewer: Node3D, folder: String, bundle: Dictionary) -> void:
+	var source: Dictionary = bundle.entities[0]
+	var entities: Array = []
+	for item: Dictionary in [{"id": "sphere", "x": 0}, {"id": "companion", "x": 64000}]:
+		entities.append(
+			{
+				"id": item.id,
+				"position_mm": [item.x, 0, 0],
+				"bounds_mm":
+				{"min": [item.x - 1000, -1000, -1000], "max": [item.x + 1000, 1000, 1000]},
+				"asset": source.asset,
+				"lod1": source.lod1
+			}
+		)
+	var result := Core.invoke("preview.create", {"profile": bundle.profile, "entities": entities})
+	check(result.ok, "Two-entity queue fixture is valid")
+	write_bytes(folder.path_join("realm.json"), JSON.stringify(result.value).to_utf8_buffer())
+	check(viewer.open_realm(folder), "Queue fixture opens")
+	viewer.navigate_position(Vector3(0, 80, 0))
+	check(await Streaming.drain(viewer), "Queue fixture mounts middle assets")
+	viewer.unmount_asset("companion")
+	viewer.set_pose(viewer.layout.entities.sphere.focus)
+	check(viewer.queue == ["sphere", "companion"], "Nearby upgrade precedes a farther new load")
+	check(not viewer.impostors.instances.sphere.visible, "Queued upgrade preserves its scene")
+	check(viewer.impostors.instances.companion.visible, "New load retains its box")
+	check(await Streaming.drain(viewer), "Ordered replacement and new load complete")
+	check(viewer.loaded_assets.sphere == source.asset.sha256, "Upgrade mounts the core target SHA")
+	# A late worker failure must also reconcile visibility outside the far radius.
+	viewer.set_radii([16, 4000, 4000])
+	viewer.navigate_position(Vector3(0, 4300, 0))
+	viewer.reject_asset(
+		source.lod1.sha256, Loader.failure(Loader.MISSING_ASSET, "Injected failure")
+	)
+	check(viewer.loaded.is_empty(), "Late target failure releases retained scenes")
+	check(
+		(
+			not viewer.impostors.instances.sphere.visible
+			and not viewer.impostors.instances.companion.visible
+		),
+		"Late failure never reveals boxes beyond the far radius"
+	)
+	viewer.clear_realm()

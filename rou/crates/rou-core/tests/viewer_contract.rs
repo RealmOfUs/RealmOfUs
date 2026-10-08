@@ -8,6 +8,114 @@ fn manifest() -> Manifest {
     world.projections(&records).unwrap().manifest().unwrap()
 }
 
+fn distinct_manifest() -> Manifest {
+    let mut world = manifest();
+    for entity in &mut world.entities {
+        entity.lod1.sha256 = rou_core::json::digest(entity.id.as_bytes());
+        entity.lod1.path = rou_core::paths::object(&entity.lod1.sha256);
+    }
+    world
+}
+
+#[test]
+fn near_hysteresis_depends_on_the_mounted_sha_and_preserves_replacement_boxes() {
+    let world = distinct_manifest();
+    let house = world.entities.iter().find(|e| e.id == "house").unwrap();
+    let index = viewer::Catalog::new(&world).unwrap();
+    let mut request = viewer::Residency {
+        position: [0., 49., 0.],
+        radii: [16., 64., 4000.],
+        loaded: Default::default(),
+        hysteresis: viewer::default_hysteresis(),
+    };
+    let fresh = index.query(&request).unwrap();
+    assert_eq!(fresh["tiers"]["near"], json!([]));
+    request
+        .loaded
+        .insert("house".into(), house.asset.sha256.clone());
+    let resident = index.query(&request).unwrap();
+    assert_eq!(resident["tiers"]["near"], json!(["house"]));
+    assert_eq!(resident["keep"], json!(["house"]));
+    request.position[1] = 32. + 16. * request.hysteresis;
+    assert_eq!(index.query(&request).unwrap()["keep"], json!(["house"]));
+    request.position[1] += 0.001;
+    let replacement = index.query(&request).unwrap();
+    assert_eq!(replacement["load"], json!(["house", "bench"]));
+    assert_eq!(replacement["keep"], json!([]));
+    assert_eq!(replacement["unload"], json!([]));
+    assert_eq!(replacement["impostor_hidden"], json!(["house"]));
+    assert_eq!(replacement["impostor_visible"], json!(["bench"]));
+    request
+        .loaded
+        .insert("house".into(), house.lod1.sha256.clone());
+    request.position[1] = 49.;
+    assert_eq!(index.query(&request).unwrap()["tiers"]["near"], json!([]));
+    request.position[1] = 48.;
+    let approach = index.query(&request).unwrap();
+    assert_eq!(approach["tiers"]["near"], json!(["house"]));
+    assert_eq!(approach["load"], json!(["house", "bench"]));
+}
+
+#[test]
+fn replacements_share_nearest_first_work_order_with_new_loads() {
+    let world = distinct_manifest();
+    let house = world.entities.iter().find(|e| e.id == "house").unwrap();
+    let index = viewer::Catalog::new(&world).unwrap();
+    let mut request = viewer::Residency {
+        position: [0.5; 3],
+        radii: [16., 64., 4000.],
+        loaded: [("house".into(), house.lod1.sha256.clone())].into(),
+        hysteresis: viewer::default_hysteresis(),
+    };
+    let upgrade = index.query(&request).unwrap();
+    assert_eq!(upgrade["load"], json!(["house", "bench"]));
+    assert_eq!(upgrade["keep"], json!([]));
+    assert_eq!(upgrade["unload"], json!([]));
+    // At an exact AABB-center tie, IDs still break ties across both work kinds.
+    request.position[0] = 16.5;
+    assert_eq!(
+        index.query(&request).unwrap()["load"],
+        json!(["bench", "house"])
+    );
+    request
+        .loaded
+        .insert("house".into(), house.asset.sha256.clone());
+    request.position = [0., 100., 0.];
+    let retained_swap = index.query(&request).unwrap();
+    assert_eq!(retained_swap["load"], json!(["house"]));
+    assert_eq!(retained_swap["keep"], json!([]));
+    assert_eq!(retained_swap["impostor_hidden"], json!(["house"]));
+    request.loaded.clear();
+    assert_eq!(index.query(&request).unwrap()["load"], json!([]));
+}
+
+#[test]
+fn identical_tier_hashes_use_full_hysteresis_without_replacement_work() {
+    let world = manifest();
+    let index = viewer::Catalog::new(&world).unwrap();
+    let mut request = viewer::Residency {
+        position: [0., 49., 0.],
+        radii: [16., 64., 4000.],
+        loaded: [("house".into(), world.entities[0].asset.sha256.clone())].into(),
+        hysteresis: viewer::default_hysteresis(),
+    };
+    assert_eq!(
+        index.query(&request).unwrap()["tiers"]["near"],
+        json!(["house"])
+    );
+    request.position[1] = 51.;
+    let mid = index.query(&request).unwrap();
+    assert_eq!(mid["keep"], json!(["house"]));
+    assert_eq!(mid["load"], json!(["bench"]));
+    assert_eq!(mid["tiers"]["near"], json!([]));
+    assert!(
+        mid["tiers"]["mid"]
+            .as_array()
+            .unwrap()
+            .contains(&json!("house"))
+    );
+}
+
 #[test]
 fn default_camera_frames_the_union_and_empty_world() {
     let mut world = manifest();
@@ -31,7 +139,7 @@ fn streaming_uses_distance_to_chunks_deduplicates_and_orders_nearest() {
             manifest: world.clone(),
             position,
             radii: [16., 48., 4000.],
-            loaded: vec![],
+            loaded: Default::default(),
             hysteresis: viewer::default_hysteresis(),
         })
         .unwrap();
@@ -41,7 +149,7 @@ fn streaming_uses_distance_to_chunks_deduplicates_and_orders_nearest() {
                 .query(&viewer::Residency {
                     position,
                     radii: [16., 48., 4000.],
-                    loaded: vec![],
+                    loaded: Default::default(),
                     hysteresis: viewer::default_hysteresis(),
                 })
                 .unwrap()
@@ -122,7 +230,7 @@ fn tiers_hysteresis_and_missing_payloads_use_only_catalog_metadata() {
     let mut request = viewer::Residency {
         position: [0., 48., 0.],
         radii: [16., 64., 4000.],
-        loaded: vec![],
+        loaded: Default::default(),
         hysteresis: viewer::default_hysteresis(),
     };
     let near = index.query(&request).unwrap();
@@ -136,7 +244,7 @@ fn tiers_hysteresis_and_missing_payloads_use_only_catalog_metadata() {
     assert_eq!(index.query(&request).unwrap()["load"], json!(["house"]));
     request.position[1] = 96.001;
     assert_eq!(index.query(&request).unwrap()["load"], json!([]));
-    request.loaded = vec!["house".into()];
+    request.loaded = [("house".into(), manifest().entities[0].asset.sha256.clone())].into();
     request.position[1] = 32. + 64. * request.hysteresis;
     let retained = index.query(&request).unwrap();
     assert_eq!(retained["keep"], json!(["house"]));
@@ -198,7 +306,7 @@ fn streaming_validates_settings_and_loaded_ids_and_supplies_impostors() {
     let mut request = viewer::Residency {
         position: [0.; 3],
         radii: viewer::default_radii(),
-        loaded: vec![],
+        loaded: Default::default(),
         hysteresis: 1.,
     };
     for bad in [0.99, f64::NAN, f64::INFINITY, 100_000.] {
@@ -206,7 +314,7 @@ fn streaming_validates_settings_and_loaded_ids_and_supplies_impostors() {
         assert!(index.query(&request).is_err());
     }
     request.hysteresis = 1.;
-    request.loaded = vec!["absent".into()];
+    request.loaded = [("absent".into(), "0".repeat(64))].into();
     assert!(index.query(&request).is_err());
     request.loaded.clear();
     request.radii = [rou_core::limits::VIEW_COORDINATE_METRES; 3];
@@ -231,7 +339,7 @@ fn equal_radii_prioritize_nearer_tiers_and_retention_can_exceed_far_radius() {
     let mut request = viewer::Residency {
         position: [0., 48., 0.],
         radii: [16.; 3],
-        loaded: vec![],
+        loaded: Default::default(),
         hysteresis: 1.15,
     };
     let boundary = index.query(&request).unwrap();
@@ -244,7 +352,7 @@ fn equal_radii_prioritize_nearer_tiers_and_retention_can_exceed_far_radius() {
         json!(["house"])
     );
     request.position[1] = 49.;
-    request.loaded = vec!["house".into(), "house".into()];
+    request.loaded = [("house".into(), manifest().entities[0].asset.sha256.clone())].into();
     let retained = index.query(&request).unwrap();
     assert_eq!(retained["keep"], json!(["house"]));
     assert_eq!(retained["tiers"]["mid"], json!(["house"]));
@@ -262,7 +370,7 @@ fn retention_has_an_explicit_distance_budget_independent_of_the_default() {
     let mut request = viewer::Residency {
         position: [0.; 3],
         radii: [4_000_000.; 3],
-        loaded: vec![],
+        loaded: Default::default(),
         hysteresis: 1.15,
     };
     assert!(index.query(&request).is_ok());
@@ -291,7 +399,9 @@ fn viewer_dispatch_rejects_bad_radii_queries_and_loaded_ids() {
     for changes in [
         json!({"radii": null}),
         json!({"radii": [64, 16, 4000]}),
-        json!({"loaded": ["absent"]}),
+        json!({"loaded": ["house"]}),
+        json!({"loaded": {"absent": "0".repeat(64)}}),
+        json!({"loaded": {"house": "0".repeat(64)}}),
         json!({"hysteresis": 0.5}),
         json!({"unexpected": true}),
     ] {

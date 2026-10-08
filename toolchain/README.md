@@ -34,6 +34,22 @@ clang -std=c11 -Wall -Wextra -Werror -I rou/include \
 build/rust-validation/ffi-c-smoke
 ```
 
+## Detailed display evidence
+
+```bash
+make test-detailed-display
+```
+
+This builds the native adapters and opens `build/scale/detailed/.rou/view/worktree/realm.json` with a real renderer. If the sample is absent, `examples/scale/make_detailed_realm.py` generates it in an empty directory, reusing verified Poly Haven downloads in `.cache/`; unavailable downloads fail explicitly. A nonempty incomplete sample is never overwritten. After rebuilding existing runtime assets, refresh the browse bundle with `rou view --worktree --all` from that sample repository before capturing it; the harness rejects stale middle-tier textures. For an existing bundle and a chosen capture directory, run:
+
+```bash
+python3 toolchain/build/verify_detailed_display.py --activate \
+  --realm build/scale/detailed/.rou/view/worktree/realm.json \
+  --output build/scale/detailed-display
+```
+
+`--activate` is macOS-only and activates the measured PID. On other platforms omit it and keep the window foreground. The harness requires 500 ms of continuous focus before opening the world and before each screenshot. It checks distinct full/lod1 hashes, mounted tiers, inspected image dimensions, no rejected assets or engine errors, and zero resident scenes and cached prototypes after release. It writes six PNGs, `display.log` and `report.json`, and prints one `DETAILED_DISPLAY_VERIFIED` JSON receipt with assertion count, screenshot paths, SHAs and image dimensions. Middle captures use a narrower camera FOV at 128 m from each entity center to permit texture inspection at comparable screen size; the receipt records each pose and FOV. These are functional visual checks, not frame-time measurements. Shared-asset performance is measured separately by `make bench-viewer`.
+
 ## Blender extension
 
 ```bash

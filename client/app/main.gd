@@ -382,7 +382,7 @@ func refresh_assets() -> void:
 		(
 			JSON
 			. stringify(
-				{"position": Core.array(camera.position), "radii": radii, "loaded": loaded.keys()}
+				{"position": Core.array(camera.position), "radii": radii, "loaded": loaded_assets}
 			)
 			. to_utf8_buffer()
 		)
@@ -399,16 +399,15 @@ func refresh_assets() -> void:
 	for id: String in response.value.unload:
 		unmount_asset(id)
 	if not asset_failures.is_empty():
+		var mounted_count := loaded.size()
 		for id: String in catalog:
 			sync_asset_failure(id)
-	var visible: Array = response.value.impostor_visible
-	for id: String in response.value.keep:
-		if not loaded.has(id):
-			visible.append(id)
-		elif loaded_assets[id] != desired_asset(id).sha256:
-			needed.append(id)
-	# Tier replacement preserves the old scene until the new one mounts, except on failure.
-	impostors.apply(visible, loaded.keys())
+		if loaded.size() != mounted_count:
+			# Detachment changes hysteresis and box visibility; let core reconcile both.
+			refresh_assets()
+			return
+	# Core includes old scenes awaiting replacement in its hidden set.
+	impostors.apply(response.value.impostor_visible, response.value.impostor_hidden)
 	var wanted: Dictionary = {}
 	for id: String in needed:
 		wanted[id] = true
@@ -442,6 +441,7 @@ func apply_detail(id: String) -> void:
 
 
 func desired_asset(id: String) -> Dictionary:
+	# The core decides the tier (with hysteresis); the host only maps it to a descriptor.
 	return catalog[id].asset if near_ids.has(id) else catalog[id].lod1
 
 
@@ -473,13 +473,15 @@ func sync_asset_failure(id: String) -> void:
 	queue.erase(id)
 	if loaded.has(id):
 		unmount_asset(id)
-		impostors.set_visible_entity(id, true)
 
 
 func reject_asset(sha: String, failure: Dictionary) -> void:
 	asset_failures[sha] = failure
+	var mounted_count := loaded.size()
 	for id: String in asset_ids.get(sha, []):
 		sync_asset_failure(id)
+	if loaded.size() != mounted_count:
+		refresh_assets()
 
 
 func streaming_busy() -> bool:
@@ -751,7 +753,7 @@ func _process(delta: float) -> void:
 	)
 	if not world_ui.selection.is_empty() and catalog.has(world_ui.selection):
 		var id: String = world_ui.selection
-		var asset := desired_asset(id)
+		var asset: Dictionary = desired_asset(id)
 		diagnostic.text += (
 			"\nSelected %s: %s\nMounted SHA: %s" % [id, asset.path, loaded_assets.get(id, "none")]
 		)

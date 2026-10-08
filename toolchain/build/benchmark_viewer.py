@@ -3,10 +3,21 @@
 import argparse
 import json
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def power_source():
+    """Report mains or battery power; frame-time P95 was 3-5 ms worse on battery."""
+    if sys.platform != "darwin":
+        return "unknown"
+    status = subprocess.run(["pmset", "-g", "batt"], capture_output=True, text=True).stdout
+    if "AC Power" in status:
+        return "ac"
+    return "battery" if "Battery Power" in status else "unknown"
 
 
 def run(command, report, seconds=30, user_args=None, json_output=False, activate=False):
@@ -77,6 +88,7 @@ def run(command, report, seconds=30, user_args=None, json_output=False, activate
         raise RuntimeError("Frame groups do not partition the measurement: " + str(report))
     data.update(
         activation_requested=activate,
+        power_source=power_source(),
         activation_result=activation.stdout.strip() if activation else None,
         peak_rss_bytes=peak,
         rss_samples=samples,
@@ -108,6 +120,7 @@ def run(command, report, seconds=30, user_args=None, json_output=False, activate
             "cancelled",
             "viewport",
             "foreground_measurement_valid",
+            "power_source",
         ]
     }
     print(json.dumps(summary, indent=None if json_output else 2), flush=True)

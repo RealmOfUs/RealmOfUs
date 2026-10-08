@@ -218,7 +218,7 @@ def exercise(receipt: Receipt, archive: Path) -> None:
     receipt.check(
         "packaged_native_library",
         addon.core.library_path().is_relative_to(receipt.output)
-        and addon.core.LIB.rou_abi_version() == 1,
+        and addon.core.LIB.rou_abi_version() == 2,
     )
     receipt.value["installed_module"] = addon.__file__
     receipt.check(

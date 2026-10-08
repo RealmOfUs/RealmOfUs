@@ -10,7 +10,7 @@ static func invoke(operation: String, input: Variant = PackedByteArray()) -> Dic
 	)
 	if native == null:
 		native = Rou.new()
-		if native.abi_version() != 1:
+		if native.abi_version() != 2:
 			native = null
 			return {
 				"ok": false,

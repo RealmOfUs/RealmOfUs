@@ -20,4 +20,4 @@ pub const GIT_VIEW: &str = "rou-git-view/0.1";
 /// Identifier for the current finite Cartesian spatial profile.
 pub const PROFILE: &str = "bounded-cartesian-v1-experiment";
 /// Interface version used by the C ABI and GDExtension startup self-checks.
-pub const ABI_VERSION: u32 = 1;
+pub const ABI_VERSION: u32 = 2;

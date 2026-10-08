@@ -7,7 +7,7 @@ import platform
 import sys
 from pathlib import Path
 
-ABI_VERSION = 1
+ABI_VERSION = 2
 
 
 class RouError(ValueError):

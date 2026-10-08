@@ -45,7 +45,7 @@ def compare_grids(fixture: dict) -> list[dict]:
                     "manifest": variant,
                     "position": observation["position"],
                     "radii": [48, 48, 48],
-                    "loaded": [],
+                    "loaded": {},
                 },
             )
             selected = set(selection["load"])

@@ -12,7 +12,7 @@ use crate::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 /// X/Y/Z coordinates in metres; use [`coordinates`] to check finiteness and budgets.
 pub type Metres = [f64; 3];
@@ -237,7 +237,7 @@ pub fn default_radii() -> Metres {
         limits::VIEW_FAR_METRES,
     ]
 }
-/// Default multiplier applied only to already resident middle-detail assets.
+/// Default multiplier for resident assets and the near tier of mounted full assets.
 pub fn default_hysteresis() -> f64 {
     limits::VIEW_HYSTERESIS
 }
@@ -265,10 +265,10 @@ pub struct Residency {
     pub position: Metres,
     /// Near, middle and far distances to occupied chunk AABBs, in metres.
     pub radii: Metres,
-    /// IDs actually mounted by the host, not queued or in-flight entities.
+    /// Entity IDs mapped to actually mounted asset SHAs, excluding queued/in-flight assets.
     #[serde(default)]
-    pub loaded: Vec<String>,
-    /// Middle-radius multiplier, at least one; the product must fit `VIEW_RETENTION_METRES`.
+    pub loaded: BTreeMap<String, String>,
+    /// Near/retention multiplier, at least one; middle product must fit `VIEW_RETENTION_METRES`.
     #[serde(default = "default_hysteresis")]
     pub hysteresis: f64,
 }
@@ -282,17 +282,17 @@ pub struct Query {
     pub position: Metres,
     /// Positive ordered near, middle and far radii in metres.
     pub radii: Metres,
-    /// IDs actually mounted by the host.
+    /// Entity IDs mapped to actually mounted full or lod1 asset SHAs.
     #[serde(default)]
-    pub loaded: Vec<String>,
-    /// Middle-radius multiplier; the product must fit `VIEW_RETENTION_METRES`.
+    pub loaded: BTreeMap<String, String>,
+    /// Near/retention multiplier; middle product must fit `VIEW_RETENTION_METRES`.
     #[serde(default = "default_hysteresis")]
     pub hysteresis: f64,
 }
 /// Validate a catalog and select streaming actions using [`Catalog::query`].
 ///
 /// # Errors
-/// Propagate catalog, coordinate, radii, hysteresis and loaded-ID validation errors.
+/// Propagate catalog, coordinate, radii, hysteresis and loaded-asset validation errors.
 pub fn query(request: &Query) -> Result<Value> {
     Catalog::new(&request.manifest)?.query(&Residency {
         position: request.position,
@@ -309,6 +309,7 @@ pub struct Catalog {
     profile: Profile,
     chunks: Vec<(Point, Vec<String>)>,
     centers: BTreeMap<String, Metres>,
+    assets: BTreeMap<String, (String, String)>,
 }
 impl Catalog {
     /// Validate a catalog and precompute chunk coordinates and entity centers.
@@ -336,23 +337,36 @@ impl Catalog {
                     )
                 })
                 .collect(),
+            assets: manifest
+                .entities
+                .iter()
+                .map(|entity| {
+                    (
+                        entity.id.clone(),
+                        (entity.asset.sha256.clone(), entity.lod1.sha256.clone()),
+                    )
+                })
+                .collect(),
         })
     }
     /// Return disjoint `load`, `keep` and `unload` sets, and near/mid/far tier IDs.
     ///
     /// Distance is the minimum squared distance to any occupied chunk of an entity.
-    /// Boundaries are inclusive; middle retention multiplies the radius by hysteresis
-    /// and may extend beyond the far-box radius. Equal adjacent radii are allowed;
-    /// the nearer tier wins a shared boundary. Duplicate loaded IDs are deduplicated.
+    /// Boundaries are inclusive. Mounted full assets keep the near tier through near
+    /// radius times hysteresis. Middle retention uses the same multiplier and may
+    /// extend beyond the far-box radius. The nearer tier wins a shared boundary.
     /// All arrays are ordered by entity AABB-center distance, with ID breaking ties.
-    /// `impostor_hidden` equals `keep`; `impostor_visible` covers unmounted entities
-    /// within the far radius (including IDs in `unload`). Hosts hide a loading impostor
-    /// only after mounting the corresponding scene. `selected_chunks` counts occupied
-    /// chunks within the middle radius. Missing GLBs still appear in `load`.
+    /// `load` includes resident scenes whose target asset differs; the target itself
+    /// is implied by tier membership: near selects the full asset, otherwise lod1.
+    /// `impostor_hidden` includes retained scenes awaiting replacement, while
+    /// `impostor_visible` covers unmounted entities within the far radius, including
+    /// IDs in `unload`. Hosts requery after failure-driven detachment and hide a box
+    /// immediately after mounting. `selected_chunks` counts occupied chunks within
+    /// the middle radius. Missing GLBs still appear in `load`.
     ///
     /// # Errors
     /// Return errors for invalid coordinates/radii, a nonfinite or subunit hysteresis,
-    /// an over-budget retention distance, or loaded IDs absent from this catalog.
+    /// an over-budget retention distance, or loaded ID/SHA pairs absent from this catalog.
     pub fn query(&self, request: &Residency) -> Result<Value> {
         let position = request.position;
         let current = chunk_at(&self.profile, position)?;
@@ -367,14 +381,14 @@ impl Catalog {
         )?;
         require(
             request.loaded.len() <= limits::WORLD_RECORDS
-                && request
-                    .loaded
-                    .iter()
-                    .all(|id| self.centers.contains_key(id)),
+                && request.loaded.iter().all(|(id, sha)| {
+                    self.assets
+                        .get(id)
+                        .is_some_and(|(full, mid)| sha == full || sha == mid)
+                }),
             "invalid_loaded",
-            "loaded IDs must belong to the catalog and fit its budget",
+            "loaded ID/SHA pairs must match catalog assets and fit its budget",
         )?;
-        let loaded: BTreeSet<_> = request.loaded.iter().collect();
         let p = &self.profile;
         let mut distances: BTreeMap<&String, f64> = BTreeMap::new();
         let mut selected = 0;
@@ -409,30 +423,51 @@ impl Catalog {
         let (mut load, mut keep, mut unload) = (Vec::new(), Vec::new(), Vec::new());
         let (mut near, mut mid, mut far) = (Vec::new(), Vec::new(), Vec::new());
         let mut visible = Vec::new();
+        let mut hidden = Vec::new();
         for id in ordered {
             let d = distances[id];
-            let retained = loaded.contains(id) && d <= retention.powi(2);
-            if retained {
-                keep.push(id);
-            } else if loaded.contains(id) {
+            let mounted = request.loaded.get(id);
+            let (full, lod1) = &self.assets[id];
+            // Equal SHAs are identical bytes: treat a mounted copy as full for
+            // near hysteresis, and never schedule work solely to change its tier.
+            let mounted_full = if full == lod1 {
+                mounted.is_some()
+            } else {
+                mounted == Some(full)
+            };
+            let near_radius = if mounted_full {
+                radii[0] * request.hysteresis
+            } else {
+                radii[0]
+            };
+            let is_near = d <= near_radius.powi(2);
+            let target = if is_near { full } else { lod1 };
+            let retained = mounted.is_some() && d <= retention.powi(2);
+            if retained || d <= radii[1].powi(2) {
+                if mounted == Some(target) {
+                    keep.push(id);
+                } else {
+                    load.push(id);
+                }
+            } else if mounted.is_some() {
                 unload.push(id);
-            } else if d <= radii[1].powi(2) {
-                load.push(id);
             }
-            if d <= radii[0].powi(2) {
+            if is_near {
                 near.push(id);
             } else if d <= radii[1].powi(2) || retained {
                 mid.push(id);
             } else if d <= radii[2].powi(2) {
                 far.push(id);
             }
-            if !retained && d <= radii[2].powi(2) {
+            if retained {
+                hidden.push(id);
+            } else if d <= radii[2].powi(2) {
                 visible.push(id);
             }
         }
         Ok(json!({
             "load": load, "keep": keep, "unload": unload,
-            "impostor_hidden": keep, "impostor_visible": visible,
+            "impostor_hidden": hidden, "impostor_visible": visible,
             "tiers": {"near": near, "mid": mid, "far": far},
             "selected_chunks": selected, "chunk": current, "chunk_key": chunk_key(current)
         }))
