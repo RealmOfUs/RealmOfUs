@@ -92,6 +92,47 @@ make forgejo-reset     # stop, delete the data volume and local credentials
 
 Ports 3000 (HTTP) and 2222 (SSH) are published; the compose project name is `rou-forgejo`, so other containers on the same Docker host are untouched.
 
+## Collaboration bookkeeping measurements
+
+`scale_collab.py` creates disposable Git/LFS realms only under `build/scale-collab/`.
+It uses 64 models per 3.4 KB placeholder source, with eight models per group sharing
+one declared dependency. `fake_exporter.py` requires `ROU_FAKE_EXPORTER=1` and a
+marked placeholder source; the driver sets fake mode only in its subprocess
+environment. Do not export this environment into real Blender acceptance runs.
+Full/lod1 templates come from an existing `make test-git` calibration run, are
+tagged with the model ID, and are inspected through the core. They are distinct
+per model and tier but do not change when placeholder inputs change, so these
+measurements exclude real export work, binary revision growth and network costs.
+
+```bash
+make rou
+# If calibration templates are missing, run make test-git in the normal environment.
+python3 toolchain/build/scale_collab.py generate --entities 256 --output build/scale-collab/w256
+python3 toolchain/build/scale_collab.py generate --entities 4096 --output build/scale-collab/w4096
+python3 toolchain/build/scale_collab.py timing --realm build/scale-collab/w256 --repeat 5
+python3 toolchain/build/scale_collab.py timing --realm build/scale-collab/w4096 --repeat 5
+python3 toolchain/build/scale_collab.py scenarios --realm build/scale-collab/w4096
+```
+
+Generation requires an empty destination. Timing creates local fixture commits;
+it warms validation once, measures subprocess wall time separately from staging,
+and records every sample plus median P50 and nearest-rank P95 (the maximum with
+five samples). Source rebuilds also run five times. Run measurements sequentially
+on mains power, without other acceptance jobs. Reports, command logs and the
+power-source observation live in `build/scale-collab/reports/`.
+
+Scenarios start from the recorded seed commit in a fresh local bare repository.
+Each author hydrates only `m0000`, enough to edit the first source and dependency;
+inherited cold GLBs can remain unvalidated and are reported as such by rou. The
+cases cover disjoint placement edits, the same placement/source, shared dependency
+versus source changes, a deliberately stale bare Git commit, and a new dependency
+edge concurrent with an upstream dependency edit. The last case tests the claim
+that two valid proposals necessarily produce a valid clean Git merge. Every
+conflict path and rebuilt model ID is checked, and invalid clean merges are
+validated again in a fresh clone. Resolution takes Alice's side only inside these
+measurement fixtures; normal authoring follows the repository contract and rebuilds
+conflicting generated outputs from resolved inputs. No hosted service is used.
+
 ## Standalone viewer
 
 The viewer app is an independent platform release: download a precompiled application and open any browse bundle. It embeds no world and opens a world chooser without `--realm`. Developers can export the application with its native extension for the current platform:

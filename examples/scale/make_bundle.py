@@ -20,12 +20,13 @@ sys.path.insert(0, str(ROOT))
 from toolchain.build.native import ffi_library, load_core, validate_bundle
 
 
-def variant(data: bytes, index: int) -> bytes:
+def variant(data: bytes, index: int | str) -> bytes:
     """Return a byte-distinct GLB with identical geometry and images, tagged in asset.generator."""
     magic, version, _total, length, kind = struct.unpack_from("<5I", data, 0)
     document = json.loads(data[20 : 20 + length])
     generator = document.setdefault("asset", {}).get("generator", "")
-    document["asset"]["generator"] = f"{generator} scale-variant-{index:04d}".strip()
+    tag = f"{index:04d}" if isinstance(index, int) else index
+    document["asset"]["generator"] = f"{generator} scale-variant-{tag}".strip()
     chunk = json.dumps(document, separators=(",", ":")).encode()
     chunk += b" " * (-len(chunk) % 4)
     rest = data[20 + length :]
