@@ -156,6 +156,31 @@ The 0.3 root and each chunk page have independent 4 MiB budgets. `PAGE_RECORDS` 
 
 The reproduction commands and measurement boundaries are in [the toolchain guide](../toolchain/README.md#collaboration-bookkeeping-measurements). Each run saves raw samples, conflict paths, rebuilt IDs, command output and a power-source observation under `build/scale-collab/reports/`. The storage/page implementation now uses 0.3, with geometry canonicalisation deferred after measuring its residual. A 64-model fake-exporter smoke realm also validates on the new format; the 256/4096 collaboration timings above remain pre-storage history. After completing foreground acceptance, follow-up work is real pull/LFS curves on the new layout, then M5.
 
+## Network and storage model (derived, not measured)
+
+This section combines measured rows above into estimates for joining, synchronising and hosting a world. Every input is a measurement on this page; the only free parameter is bandwidth. Nothing here was observed over a network, and nothing below sets a product limit.
+
+**Inputs.** `rou clone` transfers metadata only and leaves every unselected LFS payload cold (Hosting). A model contributes about 2 KB of JSON and pointers to the Git tree; cloning a 4096-model realm from a local bare repository took about 20 s in the collaboration scenarios, dominated by checkout of the file count, not by asset bytes. Hydration bytes are the sum of the selected entities' full, lod1 and texture descriptors, deduplicated by SHA, as listed in the catalog; the detailed sample's per-tier bytes are in the high-detail table. Validation rereads hydrated GLBs and textures at about 190 MiB/s. New LFS bytes per edit of the detailed sample are in the Storage table: 12.4-35.1 MiB for a geometry-only edit, plus 1.7-3.7 MiB of images for a one-pixel texture edit; the 0.2 layout rewrote both tiers' GLBs, 122-182 MiB per edit.
+
+**Joining.** Joining a world costs metadata only: roughly 8 MB of text and pointers for 4096 models before Git compression, and on the order of 20 s of checkout on this machine for that file count. The visual richness of the world does not change this cost.
+
+**Working set.** Transfer time is bytes divided by bandwidth; at 50 Mbit/s (6.25 MB/s) and ten times faster at 500 Mbit/s:
+
+| Selection of the detailed sample | Bytes | 50 Mbit/s | 500 Mbit/s |
+| --- | --- | --- | --- |
+| One armchair, lod1 tier only | 8.94 MiB | 1.5 s | 0.15 s |
+| One armchair, both tiers | 105.55 MiB | 18 s | 1.8 s |
+| All three models, lod1 tiers only | 23.70 MiB | 4 s | 0.4 s |
+| All three models, both tiers | 270.88 MiB | 45 s | 4.5 s |
+
+Validating a hydrated armchair afterwards reads 105.55 MiB, about 0.6 s. A viewer that fetches lod1 first and full assets only within the near radius therefore opens this sample at one twelfth of the bytes of a complete download; that is the default an online viewer should adopt.
+
+**Synchronising.** An incremental pull fetches small JSON and pointer changes; payload transfer is limited to assets that changed in the lag window and lie inside the selection, at the per-edit sizes above.
+
+**Hosting.** Upstream LFS storage grows by exactly the new objects per revision, deduplicated by OID. For the three-model sample a geometry-only edit averages 22.2 MiB, so twenty such edits add about 0.44 GB, against about 3.0 GB under the 0.2 layout. A 1 GiB LFS quota holds about 45 geometry edits of models of this size, or about 7 under the old layout; a world of many such models needs paid LFS storage or the official node's own storage, and the model-count and edit-rate projections are the quantities to budget. The per-request overhead of the LFS batch API is not included; one hydrated entity is eight objects in one batch request.
+
+**What this does not cover.** Network round-trip and server latency, concurrent contributors sharing one node, texture tiers below 1024 pixels, and page-arrival stalls in the viewer (Known limits). An optional anchor measurement is one sparse hydration of one entity from the local Forgejo node, confirming that downloaded bytes equal the catalog sum.
+
 ## Hosting
 
 A plain Git host with LFS is sufficient for authoring collaboration; no rou changes were needed. Observed on Forgejo 11.0 with a public repository:
