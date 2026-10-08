@@ -7,8 +7,8 @@ use crate::{
 use bstr::BString;
 use rou_core::{
     blender,
-    documents::{BlenderExport, Build, Descriptor, ExportMetrics},
-    formats, glb, json, limits, paths,
+    documents::{BlenderExport, Build, Descriptor, ExportMetrics, ExportTexture, Textures},
+    formats, glb, image, json, limits, paths,
     selection::Selection,
     world::World,
 };
@@ -232,6 +232,11 @@ impl Repository {
         ));
         fs::create_dir(&run)?;
         let mut records = snapshot.records(&world, true)?;
+        let mut texture_references: BTreeMap<String, usize> = BTreeMap::new();
+        for texture in records.values().flat_map(|record| record.textures.iter()) {
+            snapshot.working_path(&texture.path)?;
+            *texture_references.entry(texture.path.clone()).or_default() += 1;
+        }
         let mut groups: BTreeMap<&str, Vec<&str>> = BTreeMap::new();
         for (id, model) in &world.models {
             if !records.contains_key(id) {
@@ -247,8 +252,11 @@ impl Repository {
             let folder = run.join(format!("source-{group:04}"));
             let exported = export_source(&snapshot, &world, source, &ids, &folder)?;
             for (id, (record, sizes)) in exported {
-                for asset in [&record.asset, &record.lod1] {
-                    outputs.insert(asset.path.clone(), folder.join("output").join(&asset.path));
+                for (path, _) in record.payloads() {
+                    outputs.insert(path.to_owned(), folder.join("output").join(path));
+                }
+                for texture in record.textures.iter() {
+                    *texture_references.entry(texture.path.clone()).or_default() += 1;
                 }
                 let notes: Vec<_> = [("asset", &sizes.asset), ("lod1", &sizes.lod1)]
                     .into_iter()
@@ -267,13 +275,16 @@ impl Repository {
         }
         let view = world.projections(&records)?;
         let selected = selection.resolve(&world, &view)?.assets;
+        let generated_ids: BTreeSet<_> = generated.iter().cloned().collect();
+        let mut checked_outputs = BTreeSet::new();
         for (id, record) in &records {
-            if generated.contains(id) {
+            if generated_ids.contains(id) {
                 continue;
             }
-            for asset in [&record.asset, &record.lod1] {
-                let path = &asset.path;
-                let wanted = asset.descriptor();
+            for (path, wanted) in record.payloads() {
+                if outputs.contains_key(path) || !checked_outputs.insert(path.to_owned()) {
+                    continue;
+                }
                 // A matching pointer is a complete reusable output. Do not fetch or
                 // materialize cold assets merely to reuse their build metadata.
                 let destination = snapshot.working_path(path)?;
@@ -285,7 +296,9 @@ impl Repository {
                 if intact {
                     continue;
                 }
-                if sparse.stdout.starts_with(b"true") && !selected.contains(path) {
+                if sparse.stdout.starts_with(b"true")
+                    && !selected.iter().any(|selected| selected == path)
+                {
                     ensure!(
                         "stale_runtime",
                         !destination.exists()
@@ -307,11 +320,15 @@ impl Repository {
                 let output = snapshot.payload_path(path, &wanted, true)?;
                 let bytes = io::read(&output, limits::GLB_BYTES)?;
                 wanted.verify(&bytes)?;
-                glb::precheck(&bytes)?;
+                if path.ends_with(".glb") {
+                    glb::precheck(&bytes)?;
+                } else {
+                    image::precheck(&bytes)?;
+                }
                 if output != destination {
                     let frozen = run.join("reused").join(path);
                     io::atomic_write(&frozen, &bytes)?;
-                    outputs.insert(path.clone(), frozen);
+                    outputs.insert(path.to_owned(), frozen);
                 }
             }
             reused.push(id.clone());
@@ -325,6 +342,7 @@ impl Repository {
             expected.insert(paths::lod1(id));
             expected.insert(paths::build(id));
         }
+        expected.extend(texture_references.keys().cloned());
         let runtime = io::destination(&self.root, b"runtime")?;
         let mut obsolete = Vec::new();
         if runtime.exists() {
@@ -346,7 +364,10 @@ impl Repository {
                 );
                 ensure!(
                     "invalid_layout",
-                    relative.ends_with(".json") || relative.ends_with(".glb"),
+                    relative.ends_with(".json")
+                        || relative.ends_with(".glb")
+                        || relative.ends_with(".png")
+                        || relative.ends_with(".jpg"),
                     "unrecognized runtime file: {relative}"
                 );
                 if !expected.contains(&relative) {
@@ -359,10 +380,16 @@ impl Repository {
             io::destination(&self.root, path.as_bytes())?;
         }
         for (relative, source) in &outputs {
-            io::atomic_write(
-                &io::destination(&self.root, relative.as_bytes())?,
-                &io::read(source, limits::GLB_BYTES)?,
-            )?;
+            let destination = io::destination(&self.root, relative.as_bytes())?;
+            let bytes = io::read(source, limits::GLB_BYTES)?;
+            // Shared content-addressed images need no replacement when their bytes match.
+            if !relative.ends_with(".glb")
+                && destination.is_file()
+                && snapshot.hash_working_file(&destination)? == Descriptor::of(&bytes)
+            {
+                continue;
+            }
+            io::atomic_write(&destination, &bytes)?;
         }
         for (id, record) in &records {
             io::write_json(
@@ -576,18 +603,61 @@ fn export_source(
                 "undeclared Blender dependency: {dependency}"
             );
         }
-        for (asset, metrics) in [
-            (&exported.asset, &exported.metrics.asset),
-            (&exported.lod1, &exported.metrics.lod1),
+        let mut inspected_images = BTreeMap::new();
+        for texture in exported.textures.iter() {
+            let actual = texture.texture();
+            let bytes = io::read(
+                &io::destination(&output, actual.path.as_bytes())?,
+                limits::GLB_BYTES,
+            )?;
+            let checked = actual.verify(&bytes)?;
+            ensure!(
+                "invalid_export",
+                checked == texture.metrics,
+                "exported image statistics differ: {}",
+                actual.path
+            );
+            inspected_images.insert(actual.path.clone(), checked);
+        }
+        let textures = Textures {
+            asset: exported
+                .textures
+                .asset
+                .iter()
+                .map(ExportTexture::texture)
+                .collect(),
+            lod1: exported
+                .textures
+                .lod1
+                .iter()
+                .map(ExportTexture::texture)
+                .collect(),
+        };
+        for (asset, metrics, images) in [
+            (&exported.asset, &exported.metrics.asset, &textures.asset),
+            (&exported.lod1, &exported.metrics.lod1, &textures.lod1),
         ] {
             let data = io::read(
                 &io::destination(&output, asset.path.as_bytes())?,
                 limits::GLB_BYTES,
             )?;
             asset.descriptor().verify(&data)?;
+            let report = glb::precheck(&data)?;
+            report.match_textures(images)?;
+            let report = report.with_images(
+                &images
+                    .iter()
+                    .map(|image| {
+                        (
+                            image.filename().to_owned(),
+                            inspected_images[&image.path].clone(),
+                        )
+                    })
+                    .collect(),
+            )?;
             ensure!(
                 "invalid_export",
-                glb::precheck(&data)? == *metrics,
+                report == *metrics,
                 "export statistics differ from GLB: {}",
                 asset.path
             );
@@ -599,6 +669,7 @@ fn export_source(
             input_digest: world.input_digest(&model.id)?,
             asset: exported.asset,
             lod1: exported.lod1,
+            textures,
             local_bounds_mm: blender::bounds_native(exported.bounds_blender_m)?,
             tool_versions: Some(response.tool_versions.clone()),
         };

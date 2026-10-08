@@ -57,8 +57,12 @@ def export_entity(root, output):
         root.location = original
         bpy.context.view_layer.update()
     assets = {}
+    textures = {}
     for key, path in [("asset", temporary), ("lod1", simplified)]:
-        result = core.call("glb.inspect", core.read_bytes(path, core.LIMITS["glb_bytes"]))
+        result = core.externalise_glb(path, output / "objects", "objects/")
+        textures[key] = [
+            {k: v for k, v in texture.items() if k != "metrics"} for texture in result["textures"]
+        ]
         asset = result["descriptor"]
         asset["path"] = core.call("asset.path", asset["sha256"])
         path.replace(output / asset["path"])
@@ -69,6 +73,7 @@ def export_entity(root, output):
         "position_mm": position,
         "bounds_mm": world_bounds,
         **assets,
+        "textures": textures,
     }
 
 
@@ -92,11 +97,11 @@ def export_scene(output, profile=None):
             (stage / core.PATHS["objects"]).mkdir()
             entities = [export_entity(root, stage) for root in roots]
             manifest = core.call("preview.create", {"profile": profile, "entities": entities})
-            core.write_json(stage / core.PATHS["realm"], manifest)
+            core.write_bundle(stage, manifest)
             if output.exists():
                 core.require(
                     all(
-                        p.name in {"realm.json", "objects"} and not p.is_symlink()
+                        p.name in {"realm.json", "objects", "chunks"} and not p.is_symlink()
                         for p in output.iterdir()
                     ),
                     "Choose an empty directory or an existing local preview",
@@ -109,6 +114,15 @@ def export_scene(output, profile=None):
             for path in (stage / core.PATHS["objects"]).iterdir():
                 core.require(not (destination / path.name).is_symlink(), "Object symlink forbidden")
                 shutil.copyfile(path, destination / path.name)
+            chunks = output / "chunks"
+            if chunks.exists():
+                core.require(
+                    not chunks.is_symlink()
+                    and all(p.is_file() and not p.is_symlink() for p in chunks.iterdir()),
+                    "Unsafe existing page directory",
+                )
+                shutil.rmtree(chunks)
+            (stage / "chunks").replace(chunks)
             (stage / core.PATHS["realm"]).replace(output / core.PATHS["realm"])
     finally:
         bpy.ops.object.select_all(action="DESELECT")
@@ -120,4 +134,4 @@ def export_scene(output, profile=None):
         json.dumps({"entities": len(entities), "output": str(output)}),
         flush=True,
     )
-    return manifest
+    return manifest["root"]

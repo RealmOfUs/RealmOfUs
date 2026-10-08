@@ -295,7 +295,7 @@ impl Batch {
         self.output.read_exact(&mut separator)?;
         ensure!(
             "invalid_git_response",
-            separator == [b'\n'],
+            separator == *b"\n",
             "invalid cat-file response"
         );
         Ok(Some(data))

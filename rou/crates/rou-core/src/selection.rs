@@ -100,6 +100,8 @@ impl Selection {
                 selected.extend(ids.iter().cloned());
             }
         }
+        let projections: std::collections::BTreeMap<_, _> =
+            view.entities.iter().map(|e| (e.id.as_str(), e)).collect();
         let mut inputs = BTreeSet::new();
         let mut assets = BTreeSet::new();
         for id in &selected {
@@ -113,6 +115,14 @@ impl Selection {
             inputs.extend(model.input_paths());
             assets.insert(paths::asset(&model.id));
             assets.insert(paths::lod1(&model.id));
+            if let Some(projected) = projections.get(id.as_str()) {
+                assets.extend(
+                    projected
+                        .textures
+                        .iter()
+                        .map(|texture| texture.path.clone()),
+                );
+            }
         }
         let mut directories: BTreeSet<String> =
             paths::BASE_CONE.iter().map(|p| (*p).into()).collect();

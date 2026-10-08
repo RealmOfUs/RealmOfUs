@@ -34,9 +34,9 @@ static func check_layout(path: String) -> String:
 		if name == ".DS_Store" and not directory.current_is_dir():
 			name = directory.get_next()
 			continue
-		if name == "objects":
+		if name in ["objects", "chunks"]:
 			if not directory.current_is_dir():
-				return "Bundle objects must be a directory"
+				return "Bundle payload paths must be directories"
 		elif name in ["realm.json", "version.json"]:
 			if directory.current_is_dir():
 				return "Bundle catalog and sidecar must be files"
@@ -49,7 +49,7 @@ static func check_layout(path: String) -> String:
 	objects.include_hidden = true
 	objects.list_dir_begin()
 	name = objects.get_next()
-	var filename := RegEx.create_from_string("^[0-9a-f]{64}\\.glb$")
+	var filename := RegEx.create_from_string("^[0-9a-f]{64}\\.(glb|png|jpg)$")
 	while not name.is_empty():
 		if objects.is_link(name):
 			return "Bundle object symlink forbidden"
@@ -59,7 +59,26 @@ static func check_layout(path: String) -> String:
 		if objects.current_is_dir() or filename.search(name) == null:
 			return "Unexpected bundle object: " + name
 		name = objects.get_next()
+	var chunks := DirAccess.open(root.path_join("chunks"))
+	if chunks == null:
+		return ""
+	chunks.include_hidden = true
+	chunks.list_dir_begin()
+	name = chunks.get_next()
+	while not name.is_empty():
+		if chunks.is_link(name) or chunks.current_is_dir():
+			return "Bundle page must be a regular file, not a symlink"
+		if name != ".DS_Store" and not name.ends_with(".json"):
+			return "Unexpected bundle page: " + name
+		name = chunks.get_next()
 	return ""
+
+
+static func page(root: String, descriptor: Dictionary) -> Dictionary:
+	var directory := DirAccess.open(root)
+	if directory == null or directory.is_link("chunks"):
+		return {"error": "Catalog page directory unavailable or symlinked"}
+	return read_bytes(root.path_join(descriptor.page), Core.config().limits.safety.json_bytes)
 
 
 static func read(path: String, ref: String = "") -> Dictionary:
@@ -76,6 +95,16 @@ static func read(path: String, ref: String = "") -> Dictionary:
 	if not parsed.ok:
 		return {"error": Core.message(parsed)}
 	var manifest: Dictionary = parsed.value
+	if not DirAccess.dir_exists_absolute(path.get_base_dir().path_join("chunks")):
+		return {"error": "Bundle chunks directory missing"}
+	for name: String in DirAccess.get_files_at(path.get_base_dir().path_join("chunks")):
+		if name == ".DS_Store":
+			continue
+		var key := Core.invoke(
+			"viewer.chunk", {"profile": manifest.profile, "selector": name.trim_suffix(".json")}
+		)
+		if not key.ok:
+			return {"error": "Unexpected bundle page: " + name}
 	var version: Dictionary = {}
 	var sidecar := path.get_base_dir().path_join(config.paths.version)
 	if FileAccess.file_exists(sidecar):

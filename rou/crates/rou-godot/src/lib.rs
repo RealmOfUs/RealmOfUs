@@ -35,10 +35,24 @@ impl Rou {
     fn load_catalog(&mut self, input: PackedByteArray) -> VarDictionary {
         envelope(|| {
             let manifest = rou_core::json::parse(input.as_slice())?;
-            let catalog = viewer::Catalog::new(&manifest)?;
-            let layout = viewer::catalog(&manifest)?;
+            let catalog = viewer::Catalog::load_root(&manifest)?;
+            let layout = catalog.layout()?;
             self.catalog = Some(catalog);
             Ok(serde_json::to_vec(&layout)?)
+        })
+    }
+
+    #[func]
+    fn load_page(&mut self, key: GString, input: PackedByteArray) -> VarDictionary {
+        envelope(|| {
+            let catalog = self.catalog.as_mut().ok_or_else(|| {
+                rou_core::Error::new("missing_catalog", "load a root before its pages")
+            })?;
+            let page = catalog.load_page(&key.to_string(), input.as_slice())?;
+            let layout = catalog.page_layout(&page)?;
+            Ok(serde_json::to_vec(
+                &serde_json::json!({"page": page, "layout": layout}),
+            )?)
         })
     }
 

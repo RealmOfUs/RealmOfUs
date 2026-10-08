@@ -46,15 +46,25 @@ def load_core():
 
 def validate_bundle(path: Path, core=None) -> dict:
     core = core or load_core()
-    manifest = core.read_json(path, "manifest.validate")
-    checked = set()
+    manifest = core.read_bundle(path)
+    checked = {}
     for entity in manifest["entities"]:
-        for asset in [entity["asset"], entity["lod1"]]:
+        for tier in ("asset", "lod1"):
+            asset = entity[tier]
             if asset["sha256"] not in checked:
-                raw = core.read_bytes(path.parent / asset["path"], core.LIMITS["glb_bytes"])
-                actual = core.call("glb.inspect", raw)
+                actual = core.inspect_glb(path.parent / asset["path"], "objects/")
                 core.call("asset.match", {"asset": asset, "actual": actual["descriptor"]})
-                checked.add(asset["sha256"])
+                checked[asset["sha256"]] = actual
+            actual = checked[asset["sha256"]]
+            core.require(
+                [
+                    {k: v for k, v in texture.items() if k != "metrics"}
+                    for texture in actual["textures"]
+                ]
+                == entity["textures"][tier],
+                "GLB image references differ from catalog",
+            )
+
     version = path.parent / "version.json"
     if version.exists():
         core.call(

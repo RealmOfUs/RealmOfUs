@@ -8,7 +8,7 @@ use crate::{
 use bstr::{BString, ByteSlice};
 use rou_core::{
     documents::Build,
-    glb, json, lfs, limits, paths,
+    glb, image, json, lfs, limits, paths,
     world::{View, World},
 };
 use serde::Serialize;
@@ -84,17 +84,28 @@ impl Repository {
             .filter(|p| p.starts_with(paths::RUNTIME.as_bytes()))
             .cloned()
             .collect();
-        let expected: BTreeSet<BString> = world
-            .models
-            .keys()
-            .flat_map(|id| {
-                [
-                    BString::from(paths::asset(id)),
-                    BString::from(paths::lod1(id)),
-                    BString::from(paths::build(id)),
-                ]
-            })
-            .collect();
+        let mut payloads = BTreeMap::new();
+        let mut bindings = BTreeMap::new();
+        let mut expected = BTreeSet::new();
+        for (id, record) in &records {
+            expected.insert(BString::from(paths::build(id)));
+            for (path, descriptor) in record.payloads() {
+                expected.insert(BString::from(path));
+                if let Some(previous) = payloads.insert(path.to_owned(), descriptor.clone()) {
+                    ensure!(
+                        "stale_runtime",
+                        previous == descriptor,
+                        "shared payload descriptors differ: {path}"
+                    );
+                }
+            }
+            for (asset, textures) in [
+                (&record.asset, &record.textures.asset),
+                (&record.lod1, &record.textures.lod1),
+            ] {
+                bindings.insert(asset.path.clone(), json::hash(textures)?);
+            }
+        }
         ensure!(
             "stale_runtime",
             actual == expected,
@@ -105,6 +116,7 @@ impl Repository {
                 .collect::<Vec<_>>()
         );
         let mut previous = BTreeSet::new();
+        let mut previous_bindings = BTreeSet::new();
         if verify_assets {
             for parent in self.parents(snapshot.mode.commit())? {
                 let parent = Snapshot::new(self, Mode::Commit(parent))?;
@@ -114,8 +126,19 @@ impl Repository {
                             .read(path, limits::JSON_BYTES)
                             .and_then(|b| Ok(json::parse::<Build>(&b)?))
                         {
-                            previous.insert((record.asset.sha256, record.asset.bytes));
-                            previous.insert((record.lod1.sha256, record.lod1.bytes));
+                            for (_, descriptor) in record.payloads() {
+                                previous.insert((descriptor.sha256, descriptor.bytes));
+                            }
+                            for (asset, textures) in [
+                                (&record.asset, &record.textures.asset),
+                                (&record.lod1, &record.textures.lod1),
+                            ] {
+                                previous_bindings.insert((
+                                    asset.sha256.clone(),
+                                    asset.bytes,
+                                    json::hash(textures)?,
+                                ));
+                            }
                         }
                     }
                 }
@@ -123,45 +146,83 @@ impl Repository {
         }
         let mut validated_assets = Vec::new();
         let mut missing_assets = Vec::new();
-        for asset in records
-            .values()
-            .flat_map(|record| [&record.asset, &record.lod1])
-        {
-            let descriptor = asset.descriptor();
+        let mut glbs = BTreeMap::new();
+        let mut images = BTreeMap::new();
+        for (path, descriptor) in &payloads {
             if snapshot.mode != Mode::Worktree {
                 let pointer =
-                    lfs::pointer(&snapshot.read(asset.path.as_bytes(), limits::POINTER_BYTES)?)?;
+                    lfs::pointer(&snapshot.read(path.as_bytes(), limits::POINTER_BYTES)?)?;
                 ensure!(
                     "stale_runtime",
-                    pointer.as_ref() == Some(&descriptor),
-                    "runtime pointer differs from build record: {}",
-                    asset.path
+                    pointer.as_ref() == Some(descriptor),
+                    "runtime pointer differs from build record: {path}"
                 );
             } else {
                 ensure!(
                     "stale_runtime",
-                    snapshot.descriptor(&asset.path)? == descriptor,
-                    "runtime output differs from build record: {}",
-                    asset.path
+                    snapshot.descriptor(path)? == *descriptor,
+                    "runtime output differs from build record: {path}"
                 );
             }
             if !verify_assets {
-                missing_assets.push(asset.path.clone());
+                missing_assets.push(path.clone());
                 continue;
             }
-            let data = match snapshot.payload(&asset.path, &descriptor, false) {
+            let data = match snapshot.payload(path, descriptor, false) {
                 Ok(bytes) => bytes,
                 Err(error) if error.downcast_ref::<MissingPayload>().is_some() => {
-                    if previous.contains(&(asset.sha256.clone(), asset.bytes)) {
-                        missing_assets.push(asset.path.clone());
+                    let inherited = if let Some(binding) = bindings.get(path) {
+                        previous_bindings.contains(&(
+                            descriptor.sha256.clone(),
+                            descriptor.bytes,
+                            binding.clone(),
+                        ))
+                    } else {
+                        previous.contains(&(descriptor.sha256.clone(), descriptor.bytes))
+                    };
+                    if inherited {
+                        missing_assets.push(path.clone());
                         continue;
                     }
-                    snapshot.payload(&asset.path, &descriptor, true)?
+                    snapshot.payload(path, descriptor, true)?
                 }
                 Err(error) => return Err(error),
             };
-            glb::precheck(&data)?;
-            validated_assets.push(asset.path.clone());
+            if path.ends_with(".glb") {
+                glbs.insert(path.clone(), glb::precheck(&data)?);
+            } else {
+                let report = image::precheck(&data)?;
+                ensure!(
+                    "invalid_image",
+                    path.ends_with(&format!(".{}", report.extension)),
+                    "image signature and extension differ"
+                );
+                images.insert(path.clone(), report);
+            }
+            validated_assets.push(path.clone());
+        }
+        for record in records.values() {
+            for (asset, textures) in [
+                (&record.asset, &record.textures.asset),
+                (&record.lod1, &record.textures.lod1),
+            ] {
+                if let Some(report) = glbs.get(&asset.path) {
+                    report.match_textures(textures)?;
+                    if textures
+                        .iter()
+                        .all(|texture| images.contains_key(&texture.path))
+                    {
+                        report.clone().with_images(
+                            &textures
+                                .iter()
+                                .map(|texture| {
+                                    (texture.filename().to_owned(), images[&texture.path].clone())
+                                })
+                                .collect(),
+                        )?;
+                    }
+                }
+            }
         }
         snapshot.flush()?;
         let report = Validation {

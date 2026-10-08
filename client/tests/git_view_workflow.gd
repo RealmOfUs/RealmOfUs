@@ -2,6 +2,7 @@
 extends SceneTree
 const Streaming = preload("streaming.gd")
 
+const Bundle = preload("bundle.gd")
 const Core = preload("res://core.gd")
 
 var errors: Array[String] = []
@@ -71,10 +72,11 @@ func check_bundle_paths(viewer: Node3D, bundle: String) -> void:
 				DirAccess.make_dir_recursive_absolute(temporary.path_join("objects")) == OK,
 				"Create a bundle below " + prefix
 			)
+			DirAccess.make_dir_recursive_absolute(temporary.path_join("chunks"))
 			for name: String in ["realm.json", "version.json"]:
 				DirAccess.copy_absolute(bundle.path_join(name), temporary.path_join(name))
 			check(viewer.open_realm(temporary), "Open a real macOS temporary directory bundle")
-			for name: String in ["realm.json", "version.json", "objects"]:
+			for name: String in ["realm.json", "version.json", "objects", "chunks"]:
 				DirAccess.remove_absolute(temporary.path_join(name))
 			DirAccess.remove_absolute(temporary)
 	check(viewer.open_realm(bundle), "Restore original bundle after layout checks")
@@ -118,16 +120,9 @@ func run_test() -> void:
 	var first: String = viewer.current_version
 	check(not first.is_empty(), "Fixed Git commit presented")
 	check(viewer.catalog.has("house") and viewer.catalog.has("bench"), "Authored entities present")
-	var lower := Vector3(INF, INF, INF)
-	var upper := Vector3(-INF, -INF, -INF)
-	for entity: Dictionary in viewer.manifest.entities:
-		lower = lower.min(Core.vec(entity.bounds_mm.min) * .001)
-		upper = upper.max(Core.vec(entity.bounds_mm.max) * .001)
-	var center := (lower + upper) * .5
-	var expected_start := center + Vector3.UP * lower.distance_to(upper)
 	check(
-		viewer.camera.position.distance_to(expected_start) < .0001,
-		"Default start uses all world bounds and their diagonal"
+		viewer.camera.position.distance_to(Core.vec(viewer.layout.start.position)) < .0001,
+		"Default start uses the root's occupied-chunk overview"
 	)
 	check(not viewer.manifest.has("entries"), "Preview has no viewing entries")
 	viewer.world_ui.select_entity("house")
@@ -162,12 +157,22 @@ func run_test() -> void:
 	DirAccess.make_dir_recursive_absolute(temporary.path_join("objects"))
 	DirAccess.copy_absolute(source.path_join("realm.json"), temporary.path_join("realm.json"))
 	DirAccess.copy_absolute(source.path_join("version.json"), temporary.path_join("version.json"))
+	DirAccess.make_dir_recursive_absolute(temporary.path_join("chunks"))
+	for descriptor: Dictionary in viewer.manifest.chunks.values():
+		DirAccess.copy_absolute(
+			source.path_join(descriptor.page), temporary.path_join(descriptor.page)
+		)
 	var missing: String = viewer.catalog.house.asset.path
-	for entity: Dictionary in viewer.manifest.entities:
-		if entity.asset.path != missing:
-			DirAccess.copy_absolute(
-				source.path_join(entity.asset.path), temporary.path_join(entity.asset.path)
-			)
+	if FileAccess.file_exists(temporary.path_join(missing)):
+		DirAccess.remove_absolute(temporary.path_join(missing))
+	for entity: Dictionary in viewer.catalog.values():
+		for payload: Dictionary in (
+			[entity.asset, entity.lod1] + entity.textures.asset + entity.textures.lod1
+		):
+			if payload.path != missing:
+				DirAccess.copy_absolute(
+					source.path_join(payload.path), temporary.path_join(payload.path)
+				)
 	check(viewer.open_realm(temporary), "Complete metadata opens with missing payload")
 	viewer.set_pose(viewer.layout.entities.house.focus)
 	await drain(viewer)
@@ -182,7 +187,7 @@ func run_test() -> void:
 	)
 	viewer.known_chunks[key] = known
 	var catalog: Dictionary = viewer.manifest.duplicate(true)
-	catalog.entities[0].label = "Tampered valid label"
+	catalog.chunks[catalog.chunks.keys()[0]].sha256 = "a".repeat(64)
 	check(
 		Core.invoke("manifest.validate", catalog).ok, "Tampered catalog remains structurally valid"
 	)
@@ -283,14 +288,15 @@ func run_test() -> void:
 				"position_mm": position,
 				"bounds_mm": bounds,
 				"asset": original.asset,
-				"lod1": original.asset
+				"lod1": original.asset,
+				"textures": {"asset": original.textures.asset, "lod1": original.textures.asset}
 			}
 		)
 	var shared := Core.invoke(
 		"preview.create", {"profile": viewer.manifest.profile, "entities": copies}
 	)
 	check(shared.ok, "Shared-model preview built by core")
-	write_text(temporary.path_join("realm.json"), JSON.stringify(shared.value))
+	Bundle.write(temporary, shared.value)
 	DirAccess.copy_absolute(
 		source.path_join(original.asset.path), temporary.path_join(original.asset.path)
 	)

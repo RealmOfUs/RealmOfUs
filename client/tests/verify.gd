@@ -31,7 +31,7 @@ func run_checks() -> void:
 		if not viewer.open_realm(path):
 			check(false, "Manifest rejected: " + path)
 			continue
-		for entity: Dictionary in viewer.manifest.entities:
+		for entity: Dictionary in viewer.catalog.values():
 			viewer.set_pose(viewer.layout.entities[entity.id].focus)
 			check(await Streaming.drain(viewer), "Background import completes")
 			check(viewer.loaded.has(entity.id), "GLB validated and imported: " + entity.id)
@@ -48,8 +48,8 @@ func run_checks() -> void:
 					"World maximum: " + entity.id
 				)
 		check(viewer.rejected.is_empty(), "No rejected assets")
-		if not viewer.manifest.entities.is_empty():
-			var asset: Dictionary = viewer.manifest.entities[0].asset
+		if not viewer.catalog.values().is_empty():
+			var asset: Dictionary = viewer.catalog.values()[0].asset
 			var bytes := FileAccess.get_file_as_bytes(path.get_base_dir().path_join(asset.path))
 			check(not Core.invoke("glb.precheck", bytes.slice(0, 10)).ok, "Truncated GLB rejected")
 			bytes[0] ^= 1

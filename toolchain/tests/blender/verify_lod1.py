@@ -21,17 +21,10 @@ def glb_json(path):
     return json.loads(data[20 : 20 + length])
 
 
-def embedded_images(path):
-    data = path.read_bytes()
-    length = struct.unpack_from("<I", data, 12)[0]
-    document = json.loads(data[20 : 20 + length])
-    binary = data[28 + length :]
+def external_images(path):
     return {
-        image["name"]: binary[
-            view.get("byteOffset", 0) : view.get("byteOffset", 0) + view["byteLength"]
-        ]
-        for image in document.get("images", [])
-        for view in [document["bufferViews"][image["bufferView"]]]
+        image["uri"]: (path.parent / image["uri"]).read_bytes()
+        for image in glb_json(path).get("images", [])
     }
 
 
@@ -161,6 +154,22 @@ def verify_texture_lod(check):
             names = [{m["name"] for m in glb_json(path)["materials"]} for path in paths]
             expected_names = {slot.material.name for slot in obj.material_slots}
             check(names[0] == names[1] == expected_names, f"{kind}: material names changed")
+            check(
+                all(
+                    "uri" in image and "bufferView" not in image
+                    for path in paths
+                    for image in glb_json(path).get("images", [])
+                ),
+                f"{kind}: embedded image remained",
+            )
+            full_images = {texture["sha256"] for texture in result["textures"]["asset"]}
+            lod1_images = {texture["sha256"] for texture in result["textures"]["lod1"]}
+            check(
+                full_images == lod1_images
+                if kind == "cube_small"
+                else full_images.isdisjoint(lod1_images),
+                f"{kind}: unexpected shared image set",
+            )
             if kind == "cube_small":
                 check(
                     result["asset"]["sha256"] == result["lod1"]["sha256"],
@@ -176,7 +185,7 @@ def verify_texture_lod(check):
                 f"{kind}: decoded image budget not reduced",
             )
             png = root / "lod1.png"
-            png.write_bytes(next(iter(embedded_images(paths[1]).values())))
+            png.write_bytes(next(iter(external_images(paths[1]).values())))
             resized = bpy.data.images.load(str(png))
             try:
                 expected = tuple(max(1, round(edge * limit / max(size))) for edge in size)
@@ -193,9 +202,9 @@ def verify_texture_lod(check):
                 preview = root / "preview"
                 (preview / "objects").mkdir(parents=True)
                 exported = exporter.export_entity(obj, preview)
-                preview_metrics = core.call(
-                    "glb.precheck", (preview / exported["lod1"]["path"]).read_bytes()
-                )
+                preview_metrics = core.inspect_glb(preview / exported["lod1"]["path"], "objects/")[
+                    "metrics"
+                ]
                 check(
                     preview_metrics["max_image_dimension"] == limit,
                     "Live preview missed texture policy",
@@ -290,8 +299,8 @@ def main():
             "LOD did not reduce geometry",
         )
         check(
-            embedded_images(root / result["asset"]["path"])
-            == embedded_images(root / result["lod1"]["path"]),
+            external_images(root / result["asset"]["path"])
+            == external_images(root / result["lod1"]["path"]),
             "Images within the size policy were re-encoded",
         )
         check(hashlib.sha256(source.read_bytes()).hexdigest() == digest, "Saved source changed")

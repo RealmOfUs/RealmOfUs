@@ -30,8 +30,8 @@ def load_addon(archive, output):
 
 
 def validate_bundle(core, directory):
-    manifest = core.read_json(directory / "realm.json", "manifest.validate")
-    assert {path.name for path in directory.iterdir()} == {"realm.json", "objects"}
+    manifest = core.read_bundle(directory / "realm.json")
+    assert {path.name for path in directory.iterdir()} == {"realm.json", "objects", "chunks"}
     for entity in manifest["entities"]:
         asset = entity["asset"]
         raw = (directory / asset["path"]).read_bytes()
@@ -78,8 +78,9 @@ def verify(addon, output):
         (output / name / "objects").mkdir(parents=True)
     (output / "invalid/realm.json").write_text('{"format": "invalid"}')
     empty = core.call("preview.create", {"profile": profile, "entities": []})
-    core.write_json(output / "empty/realm.json", empty)
-    core.write_json(output / "missing/realm.json", moved)
+    core.write_bundle(output / "empty", empty)
+    shutil.copytree(output / "after/chunks", output / "missing/chunks")
+    shutil.copyfile(output / "after/realm.json", output / "missing/realm.json")
     shutil.copytree(output / "before", output / "live")
     before = (output / "before/realm.json").read_bytes()
     # Root transforms, dynamic children and non-mesh geometry cannot silently export.

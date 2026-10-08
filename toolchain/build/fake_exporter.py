@@ -3,6 +3,7 @@
 
 import json
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -34,7 +35,7 @@ def main() -> None:
     ffi_library()
     core = load_core()
     # The request has no dependency lists; the generated placeholder carries them.
-    pair = tuple(p.read_bytes() for p in templates())
+    pair = templates()
     models = []
     for model in request["models"]:
         dependencies = source["models"][model["id"]]["dependencies"]
@@ -43,17 +44,21 @@ def main() -> None:
         result = {
             "id": model["id"],
             "metrics": {},
+            "textures": {},
             "bounds_blender_m": [[0, 0, 0], [1, 1, 1]],
             "dependencies": dependencies,
         }
         for tier, path_key, template in zip(
             ("asset", "lod1"), ("asset_path", "lod1_path"), pair, strict=True
         ):
-            data = variant(template, model["id"])
-            inspected = core.call("glb.inspect", data)
+            data = variant(template.read_bytes(), model["id"])
             path = Path(request["output_dir"]) / model[path_key]
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
+            for uri in core.call("glb.inspect", data)["metrics"]["images"]:
+                shutil.copyfile(template.parent / uri, path.parent / uri)
+            inspected = core.inspect_glb(path, "runtime/")
+            result["textures"][tier] = inspected["textures"]
             result[tier] = {"path": model[path_key], **inspected["descriptor"]}
             result["metrics"][tier] = inspected["metrics"]
         models.append(result)

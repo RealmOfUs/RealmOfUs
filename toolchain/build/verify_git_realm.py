@@ -143,7 +143,7 @@ class Acceptance:
             record = json.loads((official / f"runtime/{model}.json").read_text())
             for tier in ["asset", "lod1"]:
                 asset = record[tier]
-                inspected = core.call("glb.inspect", (official / asset["path"]).read_bytes())
+                inspected = core.inspect_glb(official / asset["path"], "runtime/")
                 self.check(
                     f"{model} {tier} digest and metrics",
                     inspected["descriptor"] == {key: asset[key] for key in ["sha256", "bytes"]}
@@ -195,13 +195,17 @@ class Acceptance:
         selected_view = self.directory / "selected-view"
         before = set(self.payloads(alice))
         selected = self.rou(alice, "view", "HEAD", "--output", str(selected_view))
-        catalog = json.loads((selected_view / "realm.json").read_text())
+        catalog = core.read_bundle(selected_view / "realm.json")
         selected_sources = {}
         for entity in catalog["entities"]:
             if entity["id"] in {"house", "plaque"}:
                 for tier, suffix in [("asset", ".glb"), ("lod1", ".lod1.glb")]:
-                    selected_sources.setdefault(entity[tier]["sha256"], []).append(
+                    selected_sources.setdefault(entity[tier]["path"], []).append(
                         alice / "runtime" / (entity["id"] + suffix)
+                    )
+                for texture in entity["textures"]["asset"] + entity["textures"]["lod1"]:
+                    selected_sources.setdefault(texture["path"], []).append(
+                        alice / "runtime" / Path(texture["path"]).name
                     )
         self.check(
             "default view includes only house and plaque without downloads",
@@ -214,11 +218,8 @@ class Acceptance:
             "materialized runtime assets are hard-linked",
             all(
                 # Equal-SHA tiers share one object, linked to either materialized source.
-                any(
-                    (selected_view / "objects" / (sha + ".glb")).samefile(source)
-                    for source in sources
-                )
-                for sha, sources in selected_sources.items()
+                any((selected_view / path).samefile(source) for source in sources)
+                for path, sources in selected_sources.items()
             ),
         )
         chunk_view = self.directory / "chunk-view"
@@ -300,12 +301,18 @@ class Acceptance:
         )
         self.rou(official, "view", first, "--all", "--output", str(initial_view))
         prepared = self.rou(alice, "view", "HEAD", "--all", "--output", str(merged_view))
-        merged_catalog = json.loads((merged_view / "realm.json").read_text())
+        merged_catalog = core.read_bundle(merged_view / "realm.json")
         expected_shas = {
-            entity[tier]["sha256"]
+            entity[tier]["path"]
             for entity in merged_catalog["entities"]
             for tier in ["asset", "lod1"]
         }
+        expected_shas.update(
+            texture["path"]
+            for entity in merged_catalog["entities"]
+            for textures in entity["textures"].values()
+            for texture in textures
+        )
         self.check(
             "explicit all includes four models",
             len(merged_catalog["entities"]) == 4

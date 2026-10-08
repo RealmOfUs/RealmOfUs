@@ -36,7 +36,7 @@ func run_probe() -> void:
 		return
 	viewer.set_radii(Core.config().viewer.radii)
 	# Measure at the world center so every entity is inside the middle radius
-	# (load list full), and at a far corner (load list empty, desired still full).
+	# (load list full), and at a far corner (no candidates, even though pages remain cached).
 	var results := {}
 	for label: String in ["center", "far"]:
 		viewer.camera.position = Vector3(0, 3, 0) if label == "center" else Vector3(3000, 3, 3000)

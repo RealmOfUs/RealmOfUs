@@ -62,7 +62,7 @@ fn empty_geometry_metadata_and_images_report_lower_bound_errors() {
         );
     }
     assert_eq!(
-        glb::precheck(&textured_geometry(3, 0, 0))
+        glb::externalise(&textured_geometry(3, 0, 0))
             .unwrap_err()
             .message,
         "image dimensions must be nonzero"
@@ -152,7 +152,7 @@ fn glb_json_rejects_non_utf8_duplicate_keys_and_overflow() {
     let mut bytes = common::glb(&document, &binary);
     bytes[20] = 255;
     assert!(glb::precheck(&bytes).is_err());
-    assert!(glb::image_dimensions(b"\xff\xd8\xff\xc0\x00\x00", "image/jpeg").is_err());
+    assert!(rou_core::image::dimensions(b"\xff\xd8\xff\xc0\x00\x00", "image/jpeg").is_err());
 }
 
 fn textured_geometry(vertices: usize, dimension: u32, padding: usize) -> Vec<u8> {
@@ -180,12 +180,14 @@ fn textured_geometry(vertices: usize, dimension: u32, padding: usize) -> Vec<u8>
 #[test]
 fn former_quality_caps_are_accepted_and_references_only_warn() {
     let bytes = textured_geometry(300_000, 4096, 20 * 1024 * 1024);
-    let report = glb::precheck(&bytes).unwrap();
+    let report = glb::externalise(&bytes).unwrap().metrics;
     assert_eq!(report.vertices, 300_000);
     assert_eq!(report.max_image_dimension, 4096);
     assert_eq!(report.image_decoded_bytes, 4096 * 4096 * 4);
     assert!(report.warnings().is_empty());
-    let report = glb::precheck(&textured_geometry(600_000, 8192, 33 * 1024 * 1024)).unwrap();
+    let report = glb::externalise(&textured_geometry(3_000_000, 8192, 0))
+        .unwrap()
+        .metrics;
     assert_eq!(report.warnings().len(), 3);
     assert!(
         report
@@ -206,7 +208,7 @@ fn byte_geometry_and_image_safety_limits_are_hard_rejections() {
     );
     drop(bytes);
     assert!(
-        glb::precheck(&textured_geometry(3, 20_000, 0))
+        glb::externalise(&textured_geometry(3, 20_000, 0))
             .unwrap_err()
             .message
             .contains("IMAGE_DIMENSION")
@@ -225,37 +227,44 @@ fn byte_geometry_and_image_safety_limits_are_hard_rejections() {
             .message
             .contains("VERTICES")
     );
-    // One maximum-edge image decodes to a quarter of the budget; four reach it exactly.
-    let bytes = textured_geometry(3, 16_384, 0);
-    let json_len = u32::from_le_bytes(bytes[12..16].try_into().unwrap()) as usize;
-    let mut document: Value = serde_json::from_slice(&bytes[20..20 + json_len]).unwrap();
-    let bin = &bytes[28 + json_len..];
-    let image = json!({"bufferView":1,"mimeType":"image/png"});
-    for _ in 0..3 {
-        document["images"]
-            .as_array_mut()
+    // Distinct referenced images add to the decoded budget; repeated URIs count once.
+    let (mut document, binary) = common::triangle();
+    let report = rou_core::image::Report {
+        extension: "png".into(),
+        width: 16_384,
+        height: 16_384,
+        pixels: 16_384 * 16_384,
+        decoded_bytes: 16_384 * 16_384 * 4,
+    };
+    let mut images = std::collections::BTreeMap::new();
+    for index in 0..5 {
+        images.insert(format!("{index:064x}.png"), report.clone());
+        document["images"] = json!(
+            images
+                .keys()
+                .map(|uri| json!({"uri":uri}))
+                .collect::<Vec<_>>()
+        );
+        let checked = glb::precheck(&common::glb(&document, &binary))
             .unwrap()
-            .push(image.clone());
+            .with_images(&images);
+        if index < 4 {
+            assert_eq!(
+                checked.unwrap().image_decoded_bytes,
+                (index + 1) * report.decoded_bytes
+            );
+        } else {
+            assert!(checked.unwrap_err().message.contains("IMAGE_DECODED_BYTES"));
+        }
     }
-    assert_eq!(
-        glb::precheck(&common::glb(&document, bin))
-            .unwrap()
-            .image_decoded_bytes,
-        limits::IMAGE_DECODED_BYTES
-    );
-    document["images"].as_array_mut().unwrap().push(image);
-    assert!(
-        glb::precheck(&common::glb(&document, bin))
-            .unwrap_err()
-            .message
-            .contains("IMAGE_DECODED_BYTES")
-    );
 }
 
 #[test]
 fn decoded_image_reference_warns_without_rejecting() {
     // A single maximum-edge image stays inside the safety ceiling but passes the reference.
-    let report = glb::precheck(&textured_geometry(3, 16_384, 0)).unwrap();
+    let report = glb::externalise(&textured_geometry(3, 16_384, 0))
+        .unwrap()
+        .metrics;
     assert!(report.image_decoded_bytes > limits::IMAGE_DECODED_WARN_BYTES);
     assert!(
         report
@@ -264,7 +273,9 @@ fn decoded_image_reference_warns_without_rejecting() {
             .any(|warning| warning.starts_with("decoded image bytes"))
     );
     // The former quality cap decodes to 64 MiB and stays below the reference.
-    let report = glb::precheck(&textured_geometry(3, 4096, 0)).unwrap();
+    let report = glb::externalise(&textured_geometry(3, 4096, 0))
+        .unwrap()
+        .metrics;
     assert!(
         !report
             .warnings()

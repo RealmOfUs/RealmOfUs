@@ -13,7 +13,7 @@ To generate only the preview, after `make ffi` and the calibration export:
 python3 examples/scale/make_bundle.py --count 800 --seed 20260922
 ```
 
-The generator uses Python and the core's `preview.create` and `viewer.catalog`
+The generator uses Python and the core's `preview.create` root/page publication
 operations. It places 800 entities across the default world's X/Z chunks, sharing
 three verified GLBs from the calibration preview (axis probe, house, tree). Each
 entity carries both full and lod1 descriptors; these small meshes have identical
@@ -93,3 +93,5 @@ The textured source is the detailed sample (`make_detailed_realm.py`); the refre
 one `REFRESH_COST` JSON line with the headless `refresh_assets()` cost. Results are recorded in
 `doc/status.md` under Scale measurements.
 
+
+Current generated bundles use `rou-preview/0.3`: a small root, hashed owner/coverage pages and external PNG/JPEG objects. `--unique` changes GLB generator metadata but preserves every image SHA, so storage reflects geometry variants plus shared images. `--lod1-only` selects the lod1 texture list for both tiers. Root and page budgets are independent; 4096 is a per-page record ceiling, not a world entity ceiling. Regenerate old 0.1/0.2 bundles into an empty destination.

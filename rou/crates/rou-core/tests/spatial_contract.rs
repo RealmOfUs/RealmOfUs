@@ -1,6 +1,6 @@
 //! Reviewed spatial vectors remain unchanged; the harness supplies current asset fields.
 use rou_core::{
-    documents::Manifest,
+    documents::Preview,
     json, ops,
     spatial::{Bounds, Profile},
 };
@@ -20,6 +20,7 @@ fn fixtures() -> Value {
                     .cloned()
                 {
                     map.insert("lod1".into(), asset);
+                    map.insert("textures".into(), value!({"asset":[],"lod1":[]}));
                 }
                 for child in map.values_mut() {
                     adapt(child);
@@ -145,14 +146,14 @@ fn reviewed_complete_catalogs() {
     let fixture = fixtures();
     for case in fixture["catalogs"].as_array().unwrap() {
         let value = changed(&fixture["catalog"], case, "changes");
-        let result = json::from_value::<Manifest>(value.clone()).and_then(|v| v.validate());
+        let result = json::from_value::<Preview>(value.clone()).and_then(|v| v.validate());
         assert_eq!(
             result.is_ok(),
             case["accepted"],
             "{}: {result:?}",
             case["name"]
         );
-        assert_eq!(call("manifest.validate", &value).is_ok(), case["accepted"]);
+        assert_eq!(call("preview.validate", &value).is_ok(), case["accepted"]);
         if !case["accepted"].as_bool().unwrap() {
             continue;
         }

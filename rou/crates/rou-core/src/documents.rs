@@ -40,6 +40,9 @@ macro_rules! document {
 }
 pub(crate) use document;
 
+// The on-disk paged catalog types are separate from the complete in-memory preview.
+pub use crate::paging::{Manifest, Page, PageDescriptor};
+
 /// Check for exactly 64 lowercase hexadecimal digits representing a SHA-256 digest.
 ///
 /// # Errors
@@ -350,7 +353,7 @@ impl Descriptor {
 document!(
     /// A GLB reference: repository- or bundle-relative path, digest and byte count.
     ///
-    /// Build/Manifest semantics define the exact path shape; this type only checks generic path safety and budgets.
+    /// Build/Preview semantics define the exact path shape; this type only checks generic path safety and budgets.
     Asset {
         /// `runtime/<model>.glb` or `runtime/<model>.lod1.glb` in builds, or `objects/<sha256>.glb` in browse bundles.
         path: String,
@@ -390,6 +393,154 @@ impl Asset {
     }
 }
 
+document!(
+    /// A content-addressed PNG/JPEG payload, shared across models and detail tiers.
+    Texture {
+        /// Safe path ending in the content hash and its signature-derived extension.
+        path: String,
+        /// SHA-256 of the encoded image bytes.
+        sha256: String,
+        /// Encoded image length, bounded independently from its decoded dimensions.
+        #[serde(deserialize_with = "json::unsigned")]
+        bytes: u64,
+    }
+);
+impl Texture {
+    /// Validate the flat image filename accepted in a GLB image URI.
+    pub fn uri(uri: &str) -> Result<()> {
+        let (hash, extension) = uri.rsplit_once('.').unwrap_or(("", ""));
+        require(
+            matches!(extension, "png" | "jpg"),
+            "unsafe_path",
+            "texture URI must be <sha256>.png or <sha256>.jpg",
+        )?;
+        hash_shape(hash)
+    }
+    /// Return the filename used by relative GLB image references.
+    pub fn filename(&self) -> &str {
+        self.path.rsplit('/').next().unwrap_or("")
+    }
+    /// Check hash-addressed naming, relative syntax and encoded byte limits.
+    pub fn validate_shape(&self) -> Result<()> {
+        paths::safe(&self.path)?;
+        Self::uri(self.filename())?;
+        hash_shape(&self.sha256)?;
+        require(
+            self.filename().starts_with(&self.sha256),
+            "hash_mismatch",
+            "texture filename and SHA differ",
+        )?;
+        require(
+            self.bytes > 0 && self.bytes <= limits::GLB_BYTES as u64,
+            "asset_budget",
+            "image safety limit exceeded: IMAGE_BYTES (256 MiB)",
+        )
+    }
+    /// Extract the payload identity, without reading its bytes.
+    pub fn descriptor(&self) -> Descriptor {
+        Descriptor {
+            sha256: self.sha256.clone(),
+            bytes: self.bytes,
+        }
+    }
+    /// Check the image hash, length, signature and dimensions.
+    pub fn verify(&self, data: &[u8]) -> Result<crate::image::Report> {
+        self.validate_shape()?;
+        self.descriptor().verify(data)?;
+        let report = crate::image::precheck(data)?;
+        require(
+            self.filename().ends_with(&format!(".{}", report.extension)),
+            "invalid_image",
+            "image signature and extension differ",
+        )?;
+        Ok(report)
+    }
+}
+
+/// Output images for full and middle detail, sorted by hash within each tier.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Textures<T = Texture> {
+    /// Images referenced by the full GLB.
+    pub asset: Vec<T>,
+    /// Images referenced by the middle-detail GLB.
+    pub lod1: Vec<T>,
+}
+impl<T> Default for Textures<T> {
+    fn default() -> Self {
+        Self {
+            asset: Vec::new(),
+            lod1: Vec::new(),
+        }
+    }
+}
+impl<T> Textures<T> {
+    /// Iterate both tiers; shared images may occur in each tier.
+    pub fn iter(&self) -> impl Iterator<Item = &T> {
+        self.asset.iter().chain(&self.lod1)
+    }
+}
+impl Textures {
+    /// Validate canonical paths and strictly sorted, unique image hashes per tier.
+    pub fn validate(&self, prefix: &str) -> Result<()> {
+        let mut descriptors = BTreeMap::new();
+        for images in [&self.asset, &self.lod1] {
+            require(
+                images.len() <= limits::GLB_ARRAY_ITEMS,
+                "asset_budget",
+                "too many textures",
+            )?;
+            let mut previous = None;
+            for image in images {
+                image.validate_shape()?;
+                require(
+                    image.path == format!("{prefix}{}", image.filename()),
+                    "unsafe_path",
+                    "invalid content-addressed texture path",
+                )?;
+                require(
+                    previous.is_none_or(|p: &str| p < image.sha256.as_str()),
+                    "invalid_texture",
+                    "textures must be unique and sorted by SHA",
+                )?;
+                previous = Some(&image.sha256);
+                if let Some(old) = descriptors.insert(&image.sha256, image) {
+                    require(
+                        old == image,
+                        "invalid_texture",
+                        "shared texture descriptor mismatch",
+                    )?;
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// Export response image with independently verified header statistics.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ExportTexture {
+    /// Model-independent runtime image path.
+    pub path: String,
+    /// Encoded-byte SHA-256.
+    pub sha256: String,
+    /// Encoded byte count.
+    pub bytes: u64,
+    /// Signature-derived dimensions and decoded size.
+    pub metrics: crate::image::Report,
+}
+impl ExportTexture {
+    /// Drop exporter statistics for the persistent build record.
+    pub fn texture(&self) -> Texture {
+        Texture {
+            path: self.path.clone(),
+            sha256: self.sha256.clone(),
+            bytes: self.bytes,
+        }
+    }
+}
+
 /// Ordered map from repository-relative source/dependency paths to payload descriptors.
 ///
 /// Keys must exactly match [`Model::input_paths`], including the source `.blend` itself.
@@ -413,6 +564,8 @@ document!(
         asset: Asset,
         /// Simplified GLB, with path exactly `runtime/<model>.lod1.glb`.
         lod1: Asset,
+        /// Shared external images referenced by each output GLB.
+        textures: Textures,
         /// GLB-local Y-up millimetre AABB; entity translation produces the world AABB.
         local_bounds_mm: Bounds,
         /// Optional tool-version information, excluded from the input digest; cannot be `null` when present.
@@ -421,6 +574,17 @@ document!(
     }
 );
 impl Build {
+    /// Iterate GLB and image payload descriptors; callers may deduplicate shared paths.
+    pub fn payloads(&self) -> impl Iterator<Item = (&str, Descriptor)> {
+        [&self.asset, &self.lod1]
+            .into_iter()
+            .map(|a| (a.path.as_str(), a.descriptor()))
+            .chain(
+                self.textures
+                    .iter()
+                    .map(|t| (t.path.as_str(), t.descriptor())),
+            )
+    }
     /// Check record fields, input descriptors, the model-specific output path and a positive-thickness local AABB.
     ///
     /// # Errors
@@ -451,6 +615,7 @@ impl Build {
             "runtime path must match model ID",
         )?;
         self.lod1.validate_shape()?;
+        self.textures.validate(paths::RUNTIME)?;
         require(
             self.lod1.path == paths::lod1(&self.model),
             "unsafe_path",
@@ -532,23 +697,39 @@ document!(
         offset_mm: [i64; 3],
         /// Translated world millimetre AABB with positive thickness on every axis.
         bounds_mm: Bounds,
-        /// Full GLB reference; Manifest requires a content-addressed path.
+        /// Full GLB reference; Preview requires a content-addressed path.
         asset: Asset,
         /// Middle-detail GLB reference, required even when identical to the full asset.
         lod1: Asset,
+        /// Shared external images for both tiers, using bundle-relative paths.
+        textures: Textures,
     }
 );
 impl PreviewEntity {
+    /// Iterate both GLBs and all their referenced images.
+    pub fn payloads(&self) -> impl Iterator<Item = (&str, Descriptor)> {
+        [&self.asset, &self.lod1]
+            .into_iter()
+            .map(|a| (a.path.as_str(), a.descriptor()))
+            .chain(
+                self.textures
+                    .iter()
+                    .map(|t| (t.path.as_str(), t.descriptor())),
+            )
+    }
     /// Check entity ID, label, asset reference and a positive-thickness world AABB.
     ///
     /// # Errors
     ///
-    /// Propagate local errors; [`Manifest::validate`] checks owner/offset agreement with the translation.
+    /// Propagate local errors; [`Preview::validate`] checks owner/offset agreement with the translation.
     pub fn validate_shape(&self) -> Result<()> {
         paths::identity(&self.id)?;
         label(&self.label)?;
         self.asset.validate_shape()?;
         self.lod1.validate_shape()?;
+        for texture in self.textures.iter() {
+            texture.validate_shape()?;
+        }
         self.bounds_mm.validate()
     }
 }
@@ -559,7 +740,7 @@ document!(
     /// `chunks` lists occupied chunks only; valid world chunks absent from the complete
     /// index are known to be empty. The catalog may reference GLBs not yet obtained;
     /// hosts check actual asset existence.
-    Manifest {
+    Preview {
         /// Must equal [`formats::PREVIEW`].
         format: String,
         /// The world's spatial rules.
@@ -574,7 +755,7 @@ document!(
         entities: Vec<PreviewEntity>,
     }
 );
-impl Manifest {
+impl Preview {
     /// Check format, profile digest shape, complete-index flag and catalog count budgets.
     ///
     /// # Errors
@@ -594,8 +775,7 @@ impl Manifest {
             "preview requires a complete catalog",
         )?;
         require(
-            self.entities.len() <= limits::WORLD_RECORDS
-                && self.chunks.len() <= limits::WORLD_CHUNKS,
+            self.chunks.len() <= limits::WORLD_CHUNKS,
             "catalog_budget",
             "catalog record budget exceeded",
         )
@@ -620,8 +800,32 @@ impl Manifest {
         )?;
         let mut ids = BTreeSet::new();
         let mut assets = BTreeMap::new();
+        let mut payloads = BTreeMap::new();
+        let mut texture_sets = BTreeMap::new();
         for entity in &self.entities {
             entity.validate_shape()?;
+            entity.textures.validate(paths::OBJECTS)?;
+            for (path, descriptor) in entity.payloads() {
+                if let Some(previous) = payloads.insert(path, descriptor.clone()) {
+                    require(
+                        previous == descriptor,
+                        "length_mismatch",
+                        "shared payload descriptor mismatch",
+                    )?;
+                }
+            }
+            for (asset, textures) in [
+                (&entity.asset, &entity.textures.asset),
+                (&entity.lod1, &entity.textures.lod1),
+            ] {
+                if let Some(previous) = texture_sets.insert(&asset.sha256, textures) {
+                    require(
+                        previous == textures,
+                        "invalid_texture",
+                        "shared GLB texture declarations differ",
+                    )?;
+                }
+            }
             require(
                 ids.insert(&entity.id),
                 "duplicate_id",
@@ -727,7 +931,7 @@ impl Version {
     ///
     /// # Errors
     ///
-    /// Propagate sidecar, strict JSON and Manifest errors; a catalog byte-digest mismatch returns `hash_mismatch`.
+    /// Propagate sidecar, strict JSON and Preview errors; a catalog byte-digest mismatch returns `hash_mismatch`.
     pub fn validate(&self, catalog: &[u8]) -> Result<()> {
         self.validate_shape()?;
         require(
@@ -750,6 +954,8 @@ document!(
         lod1: Asset,
         /// Core-inspected statistics for the full and simplified assets.
         metrics: ExportMetrics,
+        /// Per-tier external images, including native header statistics.
+        textures: Textures<ExportTexture>,
         /// Exported local Blender Z-up metre `[min, max]`; degenerate axes are allowed and later conservatively expanded to a millimetre AABB.
         bounds_blender_m: [[f64; 3]; 2],
         /// Helper-discovered dependency paths, all relative to the Realm root.
@@ -778,6 +984,26 @@ impl ExportedModel {
         paths::identity(&self.id)?;
         self.asset.validate_shape()?;
         self.lod1.validate_shape()?;
+        let textures = Textures {
+            asset: self
+                .textures
+                .asset
+                .iter()
+                .map(ExportTexture::texture)
+                .collect(),
+            lod1: self
+                .textures
+                .lod1
+                .iter()
+                .map(ExportTexture::texture)
+                .collect(),
+        };
+        textures.validate(paths::RUNTIME)?;
+        for texture in self.textures.iter() {
+            texture.metrics.validate()?;
+        }
+        self.metrics.asset.match_textures(&textures.asset)?;
+        self.metrics.lod1.match_textures(&textures.lod1)?;
         require(
             self.asset.path == paths::asset(&self.id) && self.lod1.path == paths::lod1(&self.id),
             "unsafe_path",
@@ -829,7 +1055,7 @@ impl BlenderExport {
             "unsupported Blender export response",
         )?;
         require(
-            !self.models.is_empty() && self.models.len() <= limits::WORLD_RECORDS,
+            !self.models.is_empty(),
             "world_budget",
             "invalid exported model count",
         )?;

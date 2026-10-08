@@ -101,6 +101,7 @@ pub fn world() -> (World, BTreeMap<String, Build>) {
                     sha256: json::digest(&asset_bytes),
                     bytes: asset_bytes.len() as u64,
                 },
+                textures: Textures::default(),
                 local_bounds_mm: Bounds {
                     min: [0; 3],
                     max: [1000; 3],

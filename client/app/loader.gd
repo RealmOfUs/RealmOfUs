@@ -10,6 +10,8 @@ var retired_tasks: Dictionary = {}
 var terminal_error: Dictionary = {}
 var mutex := Mutex.new()
 var completed: Dictionary = {}
+var pending_scan: Dictionary = {}
+var scan_root := ""
 var parse_in_worker := DisplayServer.get_name() != "headless"
 
 
@@ -22,7 +24,16 @@ func _start(key: String, work: Callable) -> void:
 
 
 func scan(root: String, assets: Dictionary) -> void:
-	_start("availability", _scan.bind(root, assets.duplicate(true)))
+	scan_root = root
+	pending_scan.merge(assets, true)
+	_start_scan()
+
+
+func _start_scan() -> void:
+	if not pending_scan.is_empty() and not tasks.has("availability"):
+		var batch := pending_scan.duplicate(true)
+		pending_scan.clear()
+		_start("availability", _scan.bind(scan_root, batch))
 
 
 func submit(root: String, asset: Dictionary) -> void:
@@ -73,6 +84,7 @@ func take_completed() -> Array[Dictionary]:
 			mutex.lock()
 			completed.erase(key)
 			mutex.unlock()
+	_start_scan()
 	return ready
 
 
@@ -95,7 +107,7 @@ func shutdown() -> void:
 	mutex.unlock()
 
 
-func _availability(root: String, asset: Dictionary) -> Dictionary:
+func _file_availability(root: String, asset: Dictionary) -> Dictionary:
 	var path := root.path_join(str(asset.path))
 	var directory := DirAccess.open(root)
 	var folder := DirAccess.open(path.get_base_dir())
@@ -105,6 +117,21 @@ func _availability(root: String, asset: Dictionary) -> Dictionary:
 	):
 		return failure("unsafe_asset_path", "Symlink asset forbidden")
 	return {} if FileAccess.file_exists(path) else failure(MISSING_ASSET, "Asset missing")
+
+
+func _availability(root: String, asset: Dictionary) -> Dictionary:
+	for payload: Dictionary in [asset] + asset.get("textures", []):
+		var error := _file_availability(root, payload)
+		if not error.is_empty():
+			return error
+	return {}
+
+
+static func payload_bytes(asset: Dictionary) -> int:
+	var total: int = asset.bytes
+	for texture: Dictionary in asset.get("textures", []):
+		total += int(texture.bytes)
+	return total
 
 
 func _scan(root: String, assets: Dictionary) -> void:
@@ -121,8 +148,9 @@ func _import(root: String, asset: Dictionary) -> void:
 	var result := _read_asset(root, asset)
 	if not result.has("error") and parse_in_worker:
 		var metrics: Dictionary = result.metrics
-		result = prepare(result.bytes)
+		result = prepare(result.bytes, result.base_path)
 		result.metrics = metrics
+	result.import_bytes = payload_bytes(asset)
 	result.seconds = (Time.get_ticks_usec() - started) / 1000000.0
 	result.worker_task = WorkerThreadPool.get_caller_task_id()
 	_publish(asset.sha256, result)
@@ -145,17 +173,61 @@ func _read_asset(root: String, asset: Dictionary) -> Dictionary:
 	if not inspected.ok:
 		return failure(inspected.error.code, Core.message(inspected))
 	var matches := Core.invoke(
-		"asset.match", {"asset": asset, "actual": inspected.value.descriptor}
+		"asset.match",
+		{
+			"asset": {"path": asset.path, "sha256": asset.sha256, "bytes": asset.bytes},
+			"actual": inspected.value.descriptor
+		}
 	)
 	if not matches.ok:
 		return failure(matches.error.code, Core.message(matches))
-	return {"bytes": bytes, "metrics": inspected.value.metrics}
+	var images: Dictionary = {}
+	for texture: Dictionary in asset.get("textures", []):
+		var image_file := FileAccess.open(root.path_join(texture.path), FileAccess.READ)
+		if image_file == null:
+			return failure("asset_read_failed", "Cannot open texture")
+		if image_file.get_length() > Core.config().limits.safety.image_bytes:
+			return failure("asset_budget", "Texture exceeds safety limit: GLB_BYTES")
+		var image_bytes := image_file.get_buffer(image_file.get_length())
+		image_file.close()
+		var image_result := Core.invoke("image.inspect", image_bytes)
+		if not image_result.ok:
+			return failure(image_result.error.code, Core.message(image_result))
+		var matched := Core.invoke(
+			"texture.match",
+			{
+				"texture": texture,
+				"actual": image_result.value.descriptor,
+				"metrics": image_result.value.metrics
+			}
+		)
+		if not matched.ok:
+			return failure(matched.error.code, Core.message(matched))
+		images[texture.path.get_file()] = image_result.value.metrics
+	var combined := Core.invoke(
+		"glb.textures",
+		{
+			"metrics": inspected.value.metrics,
+			"textures": asset.get("textures", []),
+			"images": images
+		}
+	)
+	if not combined.ok:
+		return failure(combined.error.code, Core.message(combined))
+	return {
+		"bytes": bytes,
+		"metrics": combined.value,
+		"base_path": ProjectSettings.globalize_path(root.path_join(str(asset.path)).get_base_dir())
+	}
 
 
-static func prepare(bytes: PackedByteArray) -> Dictionary:
+static func prepare(bytes: PackedByteArray, base_path: String = "") -> Dictionary:
 	var document := GLTFDocument.new()
 	var state := GLTFState.new()
-	if document.append_from_buffer(bytes, "", state) != OK:
+	state.base_path = base_path
+	# append_from_buffer derives a directory from this argument, including its final slash.
+	var import_path := base_path + "/" if not base_path.is_empty() else ""
+	if document.append_from_buffer(bytes, import_path, state) != OK:
 		return failure("gltf_import_failed", "glTF import failed")
 	var lods := 0
 	for mesh: GLTFMesh in state.get_meshes():
@@ -168,7 +240,9 @@ static func prepare(bytes: PackedByteArray) -> Dictionary:
 
 static func materialize(result: Dictionary) -> Dictionary:
 	# Called only when mounting the first instance, at most once per frame.
-	var prepared := prepare(result.bytes) if result.has("bytes") else result
+	var prepared := (
+		prepare(result.bytes, result.get("base_path", "")) if result.has("bytes") else result
+	)
 	if prepared.has("error"):
 		return prepared
 	var scene: Node3D = prepared.document.generate_scene(prepared.state)

@@ -55,7 +55,14 @@ def generate(
     objects.mkdir(exist_ok=True)
     payloads = {}
     if lod1_only:
-        models = [{**model, "asset": model["lod1"]} for model in models]
+        models = [
+            {
+                **model,
+                "asset": model["lod1"],
+                "textures": {"asset": model["textures"]["lod1"], "lod1": model["textures"]["lod1"]},
+            }
+            for model in models
+        ]
     if unique:
         variants = []
         for index in range(unique):
@@ -104,11 +111,12 @@ def generate(
                 },
                 "asset": model["asset"],
                 "lod1": model["lod1"],
+                "textures": model["textures"],
             }
         )
     # The core derives owners, offsets, profile hash and the complete spatial index.
-    manifest = core.call("preview.create", {"profile": profile, "entities": entities})
-    layout = core.call("viewer.catalog", manifest)
+    bundle = core.call("preview.create", {"profile": profile, "entities": entities})
+    manifest = bundle["root"]
     if (output / "realm.json").exists():
         existing = core.read_json(output / "realm.json", "manifest.validate")
         if existing != manifest or (output / "version.json").exists():
@@ -120,7 +128,11 @@ def generate(
                 (output / path).write_bytes(payloads[path])
             else:
                 shutil.copyfile(source.parent / path, output / path)
-    core.write_json(output / "realm.json", manifest)
+        for texture in model["textures"]["asset"] + model["textures"]["lod1"]:
+            destination = output / texture["path"]
+            if not destination.exists():
+                shutil.copyfile(source.parent / texture["path"], destination)
+    core.write_bundle(output, bundle)
     validate_bundle(output / "realm.json", core)
     return {
         "realm": str(output / "realm.json"),
@@ -129,7 +141,7 @@ def generate(
             {model[key]["sha256"] for model in models for key in ["asset", "lod1"]}
         ),
         "occupied_chunks": len(manifest["chunks"]),
-        "impostors": len(layout["impostors"]),
+        "impostors": len(entities),
         "seed": seed,
         "unique": unique,
         "lod1_only": lod1_only,

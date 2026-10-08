@@ -125,9 +125,19 @@ def build(output):
     print("ROU_SOURCE_SAVED", flush=True)
     exporter.export_scene(output / "preview")
     # The same entity geometry and IDs are indexed under each experimental grid size.
-    raw = json.loads((output / "preview/realm.json").read_text())
+    raw = core.read_bundle(output / "preview/realm.json")
     for size in [16, 32, 64]:
-        core.write_json(output / f"realm-{size}.json", with_grid(raw, size, core))
+        projected = with_grid(raw, size, core)
+        drafts = [
+            {key: value for key, value in entity.items() if key not in {"owner_chunk", "offset_mm"}}
+            for entity in projected["entities"]
+        ]
+        bundle = core.call("preview.create", {"profile": projected["profile"], "entities": drafts})
+        directory = output / f"grid-{size}"
+        import shutil
+
+        shutil.copytree(output / "preview/objects", directory / "objects", dirs_exist_ok=True)
+        core.write_bundle(directory, bundle)
     print("ROU_FIXTURE_COMPLETE", str(output / "preview/realm.json"))
 
 

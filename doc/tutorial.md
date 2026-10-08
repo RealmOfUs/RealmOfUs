@@ -88,7 +88,7 @@ Bundle: /private/tmp/realm-tutorial/garden/.rou/view/first; 4 entities in catalo
 
 A downloaded viewer app opens the **Open an exported world** chooser; select the bundle directory or its `realm.json`. The `godot` command above runs the same viewer from the source tree. Missing model payloads stay listed as **Asset missing**, never as an empty chunk.
 
-`realm.json` is the runtime catalog (profile, entities with world bounds, complete chunk index); `version.json` binds it to the commit; `objects/` holds the GLBs named by SHA-256. Local GLBs are hard-linked to materialized runtime files when possible, with a copy fallback. Treat bundle assets as read-only. The viewer starts above the centre of the world; pick a place from the chunk map, the entity list or typed coordinates, or pass `--at=12,3,5`.
+`realm.json` is the small runtime root (profile, entity count and chunk-page descriptors); `version.json` binds it to the commit. `chunks/` holds root-bound entity pages and `objects/` holds GLBs and shared PNG/JPEG images named by SHA-256. Local GLBs are hard-linked to materialized runtime files when possible, with a copy fallback. Treat bundle assets as read-only. The viewer starts above the centre of the world; pick a place from the chunk map, the entity list or typed coordinates, or pass `--at=12,3,5`.
 
 ## 4. Publish to a remote
 
@@ -259,5 +259,4 @@ exact counts depend on the Blender version and source. A `warning:` line marks
 an advisory reference exceedance, not a failed build. For machine-readable
 measurements use `rou --json build` and its per-model `metrics` and `warnings`.
 Each model now produces `runtime/<model>.glb`, `runtime/<model>.lod1.glb` and
-`runtime/<model>.json`; stage both assets with the record. Existing 0.1 build
-records and browse catalogs need regeneration.
+`runtime/<model>.json`, plus shared `runtime/<sha256>.png|jpg` images. Stage the GLBs, images and record together. Existing 0.1 and 0.2 build records and browse catalogs need regeneration with `rou build` and `rou view`.

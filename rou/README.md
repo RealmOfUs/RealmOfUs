@@ -214,13 +214,12 @@ two retain an immutable core loading index per opened bundle. Queries carry
 `position`, three metre `radii`, mounted `loaded` IDs and optional `hysteresis`;
 responses contain streaming actions and tier/box visibility. The Godot binding uses
 `experimental-threads` so worker tasks can invoke the pure core concurrently;
-`load_catalog` remains a main-thread mutation. Blender build
+`load_catalog` and `load_page` remain main-thread mutations under ABI 3. Blender build
 responses use explicit Z-up metre `bounds_blender_m`; both hosts use the core
 `blender::bounds_native` conversion.
 
-M3 build records and browse catalogs use `rou-build/0.2` and `rou-preview/0.2`.
-Every model has full and lod1 assets; both are validated, selected, hydrated and
-exported together. `rou-blender-export/0.2` includes verified descriptors and
+Current build records and browse catalogs use `rou-build/0.3` and `rou-preview/0.3`.
+Every model has full and lod1 GLBs and per-tier external texture lists; all referenced payloads are validated, selected, hydrated and exported together. Browse roots bind owner/coverage pages by hash and length; world counts are no longer limited by one catalog file. `rou-blender-export/0.3` includes verified descriptors and
 metrics for both assets. The build helper uses `librou`; `make rou` also builds
 that library. Reference warnings appear only for generated models, so reusing
 cold pointers remains offline. `config` separates `limits.safety`,

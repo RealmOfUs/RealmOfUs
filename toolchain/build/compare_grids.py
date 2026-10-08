@@ -13,14 +13,15 @@ from toolchain.build.native import load_core
 def with_grid(manifest: dict, edge_m: int, core=None) -> dict:
     core = core or load_core()
     return core.call(
-        "preview.create",
+        "preview.project",
         {
             "profile": core.call("profile.calibration", edge_m),
             "entities": [
                 {
                     key: value
                     for key, value in entity.items()
-                    if key in {"id", "label", "position_mm", "bounds_mm", "asset", "lod1"}
+                    if key
+                    in {"id", "label", "position_mm", "bounds_mm", "asset", "lod1", "textures"}
                 }
                 for entity in manifest["entities"]
             ],
@@ -32,8 +33,11 @@ def compare_grids(fixture: dict) -> list[dict]:
     core = load_core()
     # Historical geometry/position vectors stay read-only. Add only the current schema fields.
     catalog = {**fixture["manifest"], "format": core.FORMATS["preview"]}
-    catalog["entities"] = [{**entity, "lod1": entity["asset"]} for entity in catalog["entities"]]
-    manifest = core.call("manifest.validate", catalog)
+    catalog["entities"] = [
+        {**entity, "lod1": entity["asset"], "textures": {"asset": [], "lod1": []}}
+        for entity in catalog["entities"]
+    ]
+    manifest = core.call("preview.validate", catalog)
     results = []
     for edge_m in (16, 32, 64):
         variant = with_grid(manifest, edge_m, core)

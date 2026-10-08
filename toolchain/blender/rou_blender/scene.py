@@ -439,8 +439,8 @@ def export_lod1(objects, full_path, path, policy):
 
 def describe_glb(path, relative, core):
     """Delegate all output statistics, hashing and safety validation to the native core."""
-    result = core.call("glb.inspect", core.read_bytes(path, core.LIMITS["glb_bytes"]))
-    return {"path": relative, **result["descriptor"]}, result["metrics"]
+    result = core.externalise_glb(path, texture_prefix=Path(relative).parent.as_posix() + "/")
+    return {"path": relative, **result["descriptor"]}, result["metrics"], result["textures"]
 
 
 def export_model(model, request, core=None):
@@ -472,13 +472,14 @@ def export_model(model, request, core=None):
         for root, location in locations:
             root.location = location
         bpy.context.view_layer.update()
-    asset, full_metrics = describe_glb(path, model["asset_path"], core)
-    lod1, lod1_metrics = describe_glb(lod1_path, lod1_relative, core)
+    asset, full_metrics, full_textures = describe_glb(path, model["asset_path"], core)
+    lod1, lod1_metrics, lod1_textures = describe_glb(lod1_path, lod1_relative, core)
     return {
         "id": model["id"],
         "asset": asset,
         "lod1": lod1,
         "metrics": {"asset": full_metrics, "lod1": lod1_metrics},
+        "textures": {"asset": full_textures, "lod1": lod1_textures},
         "bounds_blender_m": bounds,
         "dependencies": dependencies,
     }

@@ -142,9 +142,11 @@ pub fn parse<T: DeserializeOwned>(data: &[u8]) -> Result<T> {
 pub fn from_value<T: DeserializeOwned>(value: Value) -> Result<T> {
     // Keep only the retired identifier for diagnostics, never a legacy schema reader.
     let current = match value.get("format").and_then(Value::as_str) {
-        Some("rou-build/0.1") => Some(crate::formats::BUILD),
-        Some("rou-preview/0.1") => Some(crate::formats::PREVIEW),
-        Some("rou-blender-export/0.1") => Some(crate::formats::BLENDER_EXPORT),
+        Some("rou-build/0.1" | "rou-build/0.2") => Some(crate::formats::BUILD),
+        Some("rou-preview/0.1" | "rou-preview/0.2") => Some(crate::formats::PREVIEW),
+        Some("rou-blender-export/0.1" | "rou-blender-export/0.2") => {
+            Some(crate::formats::BLENDER_EXPORT)
+        }
         _ => None,
     };
     serde_json::from_value(value).map_err(|error| match current {

@@ -26,7 +26,7 @@ pub const NODES: usize = 65_536;
 pub const NODE_DEPTH: usize = 256;
 /// Safety: maximum GLB top-level array length and primitive count per mesh.
 pub const GLB_ARRAY_ITEMS: usize = 1_048_576;
-/// Safety: maximum pixels along each axis of an embedded PNG/JPEG.
+/// Safety: maximum pixels along each axis of a referenced PNG/JPEG.
 pub const IMAGE_DIMENSION: u32 = 16_384;
 /// Safety: decoded-image budget for one GLB, estimated at four bytes per pixel.
 pub const IMAGE_DECODED_BYTES: u64 = 4 * 1024 * 1024 * 1024;
@@ -42,8 +42,8 @@ pub const CHUNK_SIZE_MM: i64 = 64_000;
 pub const WORLD_CHUNKS: usize = 32_768;
 /// Safety: maximum chunks overlapped by one entity AABB.
 pub const ENTITY_CHUNKS: usize = 2048;
-/// Safety: separate limits on model count and entity count, not a limit on their sum.
-pub const WORLD_RECORDS: usize = 4096;
+/// Safety: maximum owned entities plus foreign references in one catalog page.
+pub const PAGE_RECORDS: usize = 4096;
 /// Safety: maximum dependency paths per model, excluding its source file.
 pub const DEPENDENCIES: usize = 4096;
 /// Safety: maximum source dependency graph depth in edges, starting at depth 0.

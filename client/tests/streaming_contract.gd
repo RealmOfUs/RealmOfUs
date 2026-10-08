@@ -1,5 +1,7 @@
 ## Dense geometry exercises actual runtime LOD generation and in-flight cancellation.
 extends SceneTree
+const Bundle = preload("bundle.gd")
+const LocalCatalog = preload("res://local_catalog.gd")
 const Core = preload("res://core.gd")
 const Streaming = preload("streaming.gd")
 const Loader = preload("res://loader.gd")
@@ -39,7 +41,7 @@ func run() -> void:
 	file.store_buffer(bytes)
 	file.close()
 	var bundle := Core.invoke(
-		"preview.create",
+		"preview.project",
 		{
 			"profile": Core.config().profile,
 			"entities":
@@ -49,17 +51,17 @@ func run() -> void:
 					"position_mm": [0, 0, 0],
 					"bounds_mm": {"min": [-1000, -1000, -1000], "max": [1000, 1000, 1000]},
 					"asset": asset,
-					"lod1": asset
+					"lod1": asset,
+					"textures": {"asset": [], "lod1": []}
 				}
 			]
 		}
 	)
 	check(bundle.ok, "Dense fixture catalog is valid")
-	file = FileAccess.open(folder.path_join("realm.json"), FileAccess.WRITE)
-	file.store_string(JSON.stringify(bundle.value))
-	file.close()
+	Bundle.write(folder, bundle.value)
 	var viewer = load("res://main.tscn").instantiate()
 	viewer.options["no-recent"] = "true"
+	viewer.options["at"] = "0,3,0"
 	root.add_child(viewer)
 	viewer.set_process(false)
 	viewer.file_dialog.hide()
@@ -159,6 +161,8 @@ func run() -> void:
 		"Late retired work is released"
 	)
 	await check_distinct_lod1(viewer, folder, bundle.value, bytes)
+	await check_paged_catalog(viewer, folder, bundle.value)
+	await check_external_textures(viewer, folder, bundle.value, bytes)
 	viewer.clear_realm()
 	viewer.queue_free()
 	await process_frame
@@ -167,6 +171,9 @@ func run() -> void:
 	else:
 		DirAccess.remove_absolute(folder.path_join(asset.path))
 		DirAccess.remove_absolute(folder.path_join("objects"))
+		for name: String in DirAccess.get_files_at(folder.path_join("chunks")):
+			DirAccess.remove_absolute(folder.path_join("chunks").path_join(name))
+		DirAccess.remove_absolute(folder.path_join("chunks"))
 		DirAccess.remove_absolute(folder.path_join("realm.json"))
 		DirAccess.remove_absolute(folder)
 	print("STREAMING_CONTRACT_PASS ", checks if errors.is_empty() else errors)
@@ -278,7 +285,7 @@ func check_distinct_lod1(
 	check(lod1.sha256 != full.sha256, "Detail tiers have distinct hashes")
 	bundle.entities[0].lod1 = lod1
 	write_bytes(folder.path_join(lod1.path), simplified)
-	write_bytes(folder.path_join("realm.json"), JSON.stringify(bundle).to_utf8_buffer())
+	Bundle.write(folder, bundle)
 	check(viewer.open_realm(folder), "Dual-asset bundle opens")
 	check(await Streaming.drain(viewer), "Near asset loads")
 	check(viewer.loaded_assets.sphere == full.sha256, "Near tier uses the full hash")
@@ -372,7 +379,7 @@ func check_distinct_lod1(
 	await check_work_order(viewer, folder, bundle)
 	DirAccess.remove_absolute(folder.path_join(lod1.path))
 	bundle.entities[0].lod1 = full
-	write_bytes(folder.path_join("realm.json"), JSON.stringify(bundle).to_utf8_buffer())
+	Bundle.write(folder, bundle)
 
 
 func check_work_order(viewer: Node3D, folder: String, bundle: Dictionary) -> void:
@@ -386,12 +393,13 @@ func check_work_order(viewer: Node3D, folder: String, bundle: Dictionary) -> voi
 				"bounds_mm":
 				{"min": [item.x - 1000, -1000, -1000], "max": [item.x + 1000, 1000, 1000]},
 				"asset": source.asset,
-				"lod1": source.lod1
+				"lod1": source.lod1,
+				"textures": source.textures
 			}
 		)
-	var result := Core.invoke("preview.create", {"profile": bundle.profile, "entities": entities})
+	var result := Core.invoke("preview.project", {"profile": bundle.profile, "entities": entities})
 	check(result.ok, "Two-entity queue fixture is valid")
-	write_bytes(folder.path_join("realm.json"), JSON.stringify(result.value).to_utf8_buffer())
+	Bundle.write(folder, result.value)
 	check(viewer.open_realm(folder), "Queue fixture opens")
 	viewer.navigate_position(Vector3(0, 80, 0))
 	check(await Streaming.drain(viewer), "Queue fixture mounts middle assets")
@@ -415,5 +423,182 @@ func check_work_order(viewer: Node3D, folder: String, bundle: Dictionary) -> voi
 			and not viewer.impostors.instances.companion.visible
 		),
 		"Late failure never reveals boxes beyond the far radius"
+	)
+	viewer.clear_realm()
+
+
+func textured_bytes(original: PackedByteArray, uri: String) -> PackedByteArray:
+	var length := original.decode_u32(12)
+	var document: Dictionary = JSON.parse_string(
+		original.slice(20, 20 + length).get_string_from_utf8()
+	)
+	document.images = [
+		{"uri": uri, "mimeType": "image/jpeg" if uri.ends_with(".jpg") else "image/png"}
+	]
+	document.textures = [{"source": 0}]
+	document.materials = [{"pbrMetallicRoughness": {"baseColorTexture": {"index": 0}}}]
+	document.meshes[0].primitives[0].material = 0
+	var json_bytes := JSON.stringify(document).to_utf8_buffer()
+	while json_bytes.size() % 4:
+		json_bytes.append(32)
+	var remainder := original.slice(20 + length)
+	return (
+		(
+			PackedInt32Array(
+				[
+					0x46546c67,
+					2,
+					20 + json_bytes.size() + remainder.size(),
+					json_bytes.size(),
+					0x4e4f534a
+				]
+			)
+			. to_byte_array()
+		)
+		+ json_bytes
+		+ remainder
+	)
+
+
+func check_external_textures(
+	viewer: Node3D, folder: String, bundle: Dictionary, geometry: PackedByteArray
+) -> void:
+	var saved: Dictionary = {}
+	for tier: String in ["asset", "lod1"]:
+		var image := Image.create_empty(2, 2, false, Image.FORMAT_RGBA8)
+		image.fill(Color.RED if tier == "asset" else Color.BLUE)
+		var bytes := image.save_jpg_to_buffer() if tier == "asset" else image.save_png_to_buffer()
+		var inspected := Core.invoke("image.inspect", bytes)
+		check(inspected.ok, "Real JPEG/PNG header passes core inspection")
+		var texture: Dictionary = inspected.value.descriptor.duplicate()
+		texture.path = "objects/" + texture.sha256 + "." + inspected.value.metrics.extension
+		write_bytes(folder.path_join(texture.path), bytes)
+		var glb := textured_bytes(geometry, texture.path.get_file())
+		var asset: Dictionary = Core.invoke("glb.inspect", glb).value.descriptor.duplicate()
+		asset.path = Core.invoke("asset.path", asset.sha256).value
+		write_bytes(folder.path_join(asset.path), glb)
+		bundle.entities[0][tier] = asset
+		bundle.entities[0].textures[tier] = [texture]
+		saved[tier] = bytes
+	Bundle.write(folder, bundle)
+	var entity: Dictionary = bundle.entities[0]
+	check(viewer.open_realm(folder), "External-image catalog opens")
+	check(await Streaming.drain(viewer), "External JPEG imports using the objects base path")
+	check(viewer.loaded_assets.get("sphere") == entity.asset.sha256, "Full textured model mounts")
+	check(
+		(
+			viewer.asset_observations[entity.asset.sha256].import_bytes
+			== entity.asset.bytes + saved.asset.size()
+		),
+		"Import byte count includes texture bytes"
+	)
+	var textured_mesh: MeshInstance3D = (
+		viewer.loaded.sphere.find_children("*", "MeshInstance3D", true, false)[0]
+	)
+	var material: StandardMaterial3D = textured_mesh.get_active_material(0)
+	check(
+		material.albedo_texture != null and material.albedo_texture.get_width() == 2,
+		"Godot decoded the external image into the mounted material"
+	)
+	check(
+		material.albedo_texture.get_image().get_pixel(0, 0).r > 0.9,
+		"External JPEG retains its red source pixel"
+	)
+	viewer.clear_realm()
+	DirAccess.remove_absolute(folder.path_join(entity.textures.asset[0].path))
+	check(viewer.open_realm(folder), "Missing full image preserves valid metadata")
+	check(await Streaming.drain(viewer), "Missing image fails without hanging")
+	check(
+		viewer.rejection_codes.get("sphere") == Loader.MISSING_ASSET,
+		"Image absence marks only the affected tier"
+	)
+	viewer.navigate_position(Vector3(0, 80, 0))
+	check(await Streaming.drain(viewer), "Independent middle image remains usable")
+	check(
+		viewer.loaded_assets.get("sphere") == entity.lod1.sha256 and viewer.rejected.is_empty(),
+		"Missing full image does not poison middle detail"
+	)
+	textured_mesh = viewer.loaded.sphere.find_children("*", "MeshInstance3D", true, false)[0]
+	material = textured_mesh.get_active_material(0)
+	check(
+		material.albedo_texture.get_image().get_pixel(0, 0).b > 0.9,
+		"Independent external PNG retains its blue source pixel"
+	)
+	viewer.clear_realm()
+	write_bytes(folder.path_join(entity.textures.asset[0].path), saved.lod1)
+	check(viewer.open_realm(folder), "Corrupt image is checked during import")
+	check(await Streaming.drain(viewer), "Corrupt texture task terminates")
+	check(
+		viewer.rejection_codes.get("sphere") == "asset_mismatch",
+		"Texture bytes are independently hashed"
+	)
+	viewer.clear_realm()
+	for tier: String in ["asset", "lod1"]:
+		DirAccess.remove_absolute(folder.path_join(entity[tier].path))
+		DirAccess.remove_absolute(folder.path_join(entity.textures[tier][0].path))
+
+
+func check_paged_catalog(viewer: Node3D, folder: String, bundle: Dictionary) -> void:
+	Bundle.write(folder, bundle)
+	var root_path := folder.path_join("realm.json")
+	var original := FileAccess.get_file_as_bytes(root_path)
+	var stored_pages := folder + "-old-pages"
+	DirAccess.rename_absolute(folder.path_join("chunks"), stored_pages)
+	write_bytes(root_path, '{"format":"rou-preview/0.2"}'.to_utf8_buffer())
+	var retired := LocalCatalog.read(root_path)
+	check(
+		"document predates rou-preview/0.3" in retired.get("error", ""),
+		"Old bundles report regeneration before requiring a chunks directory"
+	)
+	DirAccess.rename_absolute(stored_pages, folder.path_join("chunks"))
+	write_bytes(root_path, original)
+	viewer.options["at"] = "5000,3,5000"
+	check(viewer.open_realm(folder), "Distant root opens without entity pages")
+	check(
+		(
+			viewer.manifest.entity_count == 1
+			and viewer.catalog.is_empty()
+			and viewer.loaded_pages.is_empty()
+		),
+		"Root-only open preserves total count without eager entities"
+	)
+	check(
+		viewer.chunk_state("0,0,0") == "Unknown metadata", "Unloaded indexed page remains unknown"
+	)
+	viewer.navigate_position(Vector3(0, 3, 0))
+	check(
+		viewer.catalog.has("sphere") and viewer.page_errors.is_empty(),
+		"Approaching loads needed pages and foreign owners"
+	)
+	check(await Streaming.drain(viewer), "Paged entity imports normally")
+	viewer.clear_realm()
+	var page := folder.path_join("chunks/0,0,0.json")
+	var bytes := FileAccess.get_file_as_bytes(page)
+	DirAccess.remove_absolute(page)
+	viewer.options["at"] = "0,3,0"
+	check(viewer.open_realm(folder), "Missing page does not falsify the root count")
+	check(
+		viewer.page_errors.has("0,0,0") and viewer.catalog.is_empty(),
+		"Missing owner is retained as an explicit page error"
+	)
+	check(
+		(
+			viewer.chunk_state("0,0,0") == "Unknown metadata"
+			and viewer.chunk_state("-1,0,0") == "Unknown metadata"
+		),
+		"Missing owner and foreign coverage cannot appear empty"
+	)
+	viewer.clear_realm()
+	write_bytes(page, bytes + PackedByteArray([32]))
+	check(viewer.open_realm(folder), "Root opens before rejecting tampered page bytes")
+	check(
+		viewer.page_errors.has("0,0,0") and viewer.catalog.is_empty(),
+		"Page hash binding rejects even valid JSON with altered bytes"
+	)
+	viewer.clear_realm()
+	write_bytes(page, bytes)
+	check(
+		viewer.open_realm(folder) and viewer.page_errors.is_empty(),
+		"Reopening resets page failures and reloads repaired bytes"
 	)
 	viewer.clear_realm()

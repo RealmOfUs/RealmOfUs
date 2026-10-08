@@ -253,7 +253,7 @@ fn lineage_and_version_sidecar_cannot_be_silently_rebound() {
     changed.id = "other".into();
     assert!(world::lineage(&world.realm, &changed).is_err());
     let view = world.projections(&records).unwrap();
-    let catalog = json::pretty(&view.manifest().unwrap()).unwrap();
+    let catalog = json::pretty(&view.manifest().unwrap().bundle().unwrap().root).unwrap();
     let version = Version {
         format: formats::GIT_VIEW.into(),
         realm_id: world.realm.id.clone(),
@@ -323,7 +323,7 @@ fn lod1_is_mandatory_and_versions_and_paths_are_strict() {
     );
     let mut value = serde_json::to_value(&manifest).unwrap();
     value["entities"][0].as_object_mut().unwrap().remove("lod1");
-    assert!(json::from_value::<rou_core::documents::Manifest>(value).is_err());
+    assert!(json::from_value::<rou_core::documents::Preview>(value).is_err());
     let mut old = manifest.clone();
     old.format = "rou-preview/0.1".into();
     assert!(old.validate().is_err());
@@ -354,7 +354,7 @@ fn retired_formats_report_regeneration_without_accepting_legacy_documents() {
             formats::BUILD,
         ),
         (
-            json::from_value::<Manifest>(manifest).unwrap_err(),
+            json::from_value::<Preview>(manifest).unwrap_err(),
             formats::PREVIEW,
         ),
         (

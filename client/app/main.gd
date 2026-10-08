@@ -29,6 +29,9 @@ var layout: Dictionary = {}
 var native_catalog: Rou
 var repository_info: Dictionary = {}
 var known_chunks: Dictionary = {}
+var loaded_pages: Dictionary = {}
+var page_errors: Dictionary = {}
+var page_owners: Dictionary = {}
 var total_chunks := 0
 var current_version := ""
 var current_chunk_key := ""
@@ -161,25 +164,15 @@ func open_realm(path: String, ref: String = "") -> bool:
 	known_chunks = layout.known.duplicate(true)
 	total_chunks = known_chunks.size()
 	current_version = repository_info.get("commit_oid", "")
-	for entity: Dictionary in manifest.entities:
-		catalog[entity.id] = entity
 	loader = Loader.new()
-	var assets: Dictionary = {}
-	for id: String in catalog:
-		for asset: Dictionary in [catalog[id].asset, catalog[id].lod1]:
-			assets[asset.sha256] = asset
-			if not asset_ids.has(asset.sha256):
-				asset_ids[asset.sha256] = []
-			if id not in asset_ids[asset.sha256]:
-				asset_ids[asset.sha256].append(id)
 	# Initialize the shared stateless adapter before any worker calls it.
 	Core.config()
-	loader.scan(asset_root, assets)
 	impostors = Impostors.new()
 	impostors.setup(layout.impostors)
 	add_child(impostors)
 	setup_grid()
 	set_pose(initial)
+	refresh_assets()
 	world_ui.opened()
 	realm_opened.emit()
 	return true
@@ -218,6 +211,9 @@ func clear_realm() -> void:
 	native_catalog = null
 	repository_info.clear()
 	known_chunks.clear()
+	loaded_pages.clear()
+	page_errors.clear()
+	page_owners.clear()
 	loaded.clear()
 	loaded_assets.clear()
 	loaded_bounds.clear()
@@ -375,10 +371,8 @@ func set_radii(values: Array) -> bool:
 	return true
 
 
-func refresh_assets() -> void:
-	if manifest.is_empty():
-		return
-	var response := native_catalog.catalog_query(
+func catalog_query() -> Dictionary:
+	return native_catalog.catalog_query(
 		(
 			JSON
 			. stringify(
@@ -387,6 +381,62 @@ func refresh_assets() -> void:
 			. to_utf8_buffer()
 		)
 	)
+
+
+func query_pages() -> Dictionary:
+	var response := catalog_query()
+	var changed := false
+	var assets: Dictionary = {}
+	while response.ok:
+		var added := false
+		for key: String in response.value.missing_pages:
+			if loaded_pages.has(key) or page_errors.has(key):
+				continue
+			var raw := LocalCatalog.page(asset_root, manifest.chunks[key])
+			if raw.has("error"):
+				page_errors[key] = raw.error
+				continue
+			var decoded := native_catalog.load_page(key, raw.bytes)
+			if not decoded.ok:
+				page_errors[key] = Core.message(decoded)
+				continue
+			loaded_pages[key] = true
+			page_owners[key] = decoded.value.page.foreign
+			added = true
+			changed = true
+			for entity: Dictionary in decoded.value.page.entities:
+				catalog[entity.id] = entity
+				for tier: String in ["asset", "lod1"]:
+					var asset: Dictionary = entity[tier].duplicate()
+					asset.textures = entity.textures[tier]
+					assets[asset.sha256] = asset
+					if not asset_ids.has(asset.sha256):
+						asset_ids[asset.sha256] = []
+					if entity.id not in asset_ids[asset.sha256]:
+						asset_ids[asset.sha256].append(entity.id)
+			var delta: Dictionary = decoded.value.layout
+			layout.entities.merge(delta.entities)
+			layout.impostors.append_array(delta.impostors)
+			for covered: String in delta.known:
+				for id: String in delta.known[covered]:
+					if id not in known_chunks[covered]:
+						known_chunks[covered].append(id)
+		if not added:
+			break
+		response = catalog_query()
+	if changed:
+		impostors.setup(layout.impostors)
+		for id: String in rejected:
+			impostors.reject(id, rejected[id], rejection_codes[id])
+		loader.scan(asset_root, assets)
+		world_ui.fill_entities()
+	return response
+
+
+func refresh_assets() -> void:
+	if manifest.is_empty():
+		return
+	var response := query_pages()
 	if not response.ok:
 		return
 	var needed: Array = response.value.load
@@ -400,7 +450,7 @@ func refresh_assets() -> void:
 		unmount_asset(id)
 	if not asset_failures.is_empty():
 		var mounted_count := loaded.size()
-		for id: String in catalog:
+		for id: String in response.value.tiers.near + response.value.tiers.mid:
 			sync_asset_failure(id)
 		if loaded.size() != mounted_count:
 			# Detachment changes hysteresis and box visibility; let core reconcile both.
@@ -442,7 +492,10 @@ func apply_detail(id: String) -> void:
 
 func desired_asset(id: String) -> Dictionary:
 	# The core decides the tier (with hysteresis); the host only maps it to a descriptor.
-	return catalog[id].asset if near_ids.has(id) else catalog[id].lod1
+	var tier := "asset" if near_ids.has(id) else "lod1"
+	var asset: Dictionary = catalog[id][tier].duplicate()
+	asset.textures = catalog[id].textures[tier]
+	return asset
 
 
 func unmount_asset(id: String) -> void:
@@ -539,6 +592,7 @@ func pump_streaming() -> void:
 		prototypes[result.key] = result
 		asset_observations[result.key] = {
 			"metrics": result.metrics,
+			"import_bytes": result.import_bytes,
 			"worker_ms": result.seconds * 1000.0,
 			"scene_ms": 0.0,
 			"mounts": 0
@@ -605,8 +659,11 @@ func chunk_state(key: String) -> String:
 		return "Outside world"
 	if not layout.known.has(key):
 		return "Outside world"
-	if not known_chunks.has(key):
+	if not known_chunks.has(key) or (manifest.chunks.has(key) and not loaded_pages.has(key)):
 		return "Unknown metadata"
+	for reference: Dictionary in page_owners.get(key, []):
+		if not loaded_pages.has(reference.owner):
+			return "Unknown metadata"
 	var ids: Array = known_chunks[key]
 	if ids.is_empty():
 		return "Known empty"

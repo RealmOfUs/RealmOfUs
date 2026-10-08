@@ -181,7 +181,7 @@ def main():
         for size in [16, 32, 64]:
             # --realm is a user argument, so arrange engine and user options explicitly.
             command = ["godot", "--path", str(ROOT / "client/app")]
-            realm = ROOT / f"build/s1-2.1/preview/realm-{size}.json"
+            realm = ROOT / f"build/s1-2.1/grid-{size}/realm.json"
             # run() appends the separator; wrapper option is handled by its argument list below.
             run_with_realm(command, realm, dest / f"grid-{size}.json", a.seconds)
     else:

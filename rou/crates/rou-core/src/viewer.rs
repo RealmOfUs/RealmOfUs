@@ -5,14 +5,14 @@
 //! manage local recent positions and actual camera/asset operations.
 use crate::{
     Result,
-    documents::{Manifest, PreviewEntity},
+    documents::{Descriptor, Manifest, Page, Preview, PreviewEntity, Texture},
     error::require,
     limits,
     spatial::{Point, Profile, chunk_key},
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 /// X/Y/Z coordinates in metres; use [`coordinates`] to check finiteness and budgets.
 pub type Metres = [f64; 3];
@@ -104,8 +104,8 @@ pub fn aim(mut request: Pose) -> Result<Pose> {
 ///
 /// # Errors
 ///
-/// Propagate [`Manifest::validate`] errors for an invalid catalog.
-pub fn default_pose(manifest: &Manifest) -> Result<Pose> {
+/// Propagate [`Preview::validate`] errors for an invalid catalog.
+pub fn default_pose(manifest: &Preview) -> Result<Pose> {
     manifest.validate()?;
     if manifest.entities.is_empty() {
         return Ok(Pose {
@@ -195,7 +195,7 @@ pub fn chunk_center(profile: &Profile, chunk: Point) -> Result<Metres> {
 /// # Errors
 ///
 /// Propagate validation errors for an invalid catalog.
-pub fn catalog(manifest: &Manifest) -> Result<Value> {
+pub fn catalog(manifest: &Preview) -> Result<Value> {
     manifest.validate()?;
     let p = &manifest.profile;
     let mut known = BTreeMap::new();
@@ -277,7 +277,7 @@ pub struct Residency {
 #[serde(deny_unknown_fields)]
 pub struct Query {
     /// Complete metadata catalog, which may reference assets not yet materialized.
-    pub manifest: Manifest,
+    pub manifest: Preview,
     /// Current camera position in metres.
     pub position: Metres,
     /// Positive ordered near, middle and far radii in metres.
@@ -302,52 +302,230 @@ pub fn query(request: &Query) -> Result<Value> {
     })
 }
 
-/// An immutable validated loading index, reusable for successive camera queries.
+/// An incrementally validated loading index, reusable for successive camera queries.
 ///
-/// Construction validates untrusted metadata once. No mutable manifest escapes this type.
+/// Root/page loading validates untrusted metadata before mutation. No mutable manifest escapes this type.
 pub struct Catalog {
+    root: Manifest,
+    root_chunks: Vec<(String, Point)>,
+    pages: BTreeMap<String, Page>,
     profile: Profile,
-    chunks: Vec<(Point, Vec<String>)>,
+    chunks: BTreeMap<String, (Point, BTreeSet<String>)>,
     centers: BTreeMap<String, Metres>,
     assets: BTreeMap<String, (String, String)>,
+    entities: BTreeMap<String, PreviewEntity>,
+    payloads: BTreeMap<String, Descriptor>,
+    texture_sets: BTreeMap<String, Vec<Texture>>,
 }
 impl Catalog {
-    /// Validate a catalog and precompute chunk coordinates and entity centers.
-    ///
-    /// # Errors
-    /// Propagate manifest validation errors without retaining partial state.
-    pub fn new(manifest: &Manifest) -> Result<Self> {
-        manifest.validate()?;
+    /// Derive a host layout delta from a verified page.
+    pub fn page_layout(&self, page: &Page) -> Result<Value> {
+        page_layout(&self.profile, page)
+    }
+    /// Validate a root and start with no loaded pages or entities.
+    pub fn load_root(root: &Manifest) -> Result<Self> {
+        root.validate()?;
         Ok(Self {
-            profile: manifest.profile.clone(),
-            chunks: manifest
+            root: root.clone(),
+            root_chunks: root
                 .chunks
-                .iter()
-                .map(|(key, ids)| Ok((crate::spatial::parse_chunk(key)?, ids.clone())))
+                .keys()
+                .map(|key| Ok((key.clone(), crate::spatial::parse_chunk(key)?)))
                 .collect::<Result<_>>()?,
-            centers: manifest
-                .entities
-                .iter()
-                .map(|entity| {
-                    (
-                        entity.id.clone(),
-                        std::array::from_fn(|a| {
-                            (entity.bounds_mm.min[a] + entity.bounds_mm.max[a]) as f64 / 2000.0
-                        }),
-                    )
-                })
-                .collect(),
-            assets: manifest
-                .entities
-                .iter()
-                .map(|entity| {
-                    (
-                        entity.id.clone(),
-                        (entity.asset.sha256.clone(), entity.lod1.sha256.clone()),
-                    )
-                })
-                .collect(),
+            profile: root.profile.clone(),
+            pages: BTreeMap::new(),
+            chunks: BTreeMap::new(),
+            centers: BTreeMap::new(),
+            assets: BTreeMap::new(),
+            entities: BTreeMap::new(),
+            payloads: BTreeMap::new(),
+            texture_sets: BTreeMap::new(),
         })
+    }
+    /// Build a fully loaded index from a complete in-memory preview.
+    pub fn new(preview: &Preview) -> Result<Self> {
+        let bundle = preview.bundle()?;
+        let mut catalog = Self::load_root(&bundle.root)?;
+        for (key, descriptor) in &bundle.root.chunks {
+            catalog.load_page(key, bundle.pages[&descriptor.page].as_bytes())?;
+        }
+        Ok(catalog)
+    }
+    /// Return the root-only layout and a conservative overview of occupied chunk bounds.
+    pub fn layout(&self) -> Result<Value> {
+        let preview = Preview {
+            format: crate::formats::PREVIEW.into(),
+            profile: self.profile.clone(),
+            profile_hash: self.root.profile_hash.clone(),
+            index_complete: true,
+            chunks: BTreeMap::new(),
+            entities: Vec::new(),
+        };
+        let mut result = catalog(&preview)?;
+        if !self.root.chunks.is_empty() {
+            let mut lower = [f64::INFINITY; 3];
+            let mut upper = [f64::NEG_INFINITY; 3];
+            for key in self.root.chunks.keys() {
+                let chunk = crate::spatial::parse_chunk(key)?;
+                for a in 0..3 {
+                    let lo = (self.profile.origin_mm[a] + chunk[a] * self.profile.chunk_size_mm[a])
+                        as f64
+                        / 1000.0;
+                    lower[a] = lower[a].min(lo);
+                    upper[a] = upper[a].max(lo + self.profile.chunk_size_mm[a] as f64 / 1000.0);
+                }
+            }
+            let center: Metres = std::array::from_fn(|a| (lower[a] + upper[a]) / 2.0);
+            let diagonal = (0..3)
+                .map(|a| (upper[a] - lower[a]).powi(2))
+                .sum::<f64>()
+                .sqrt();
+            result["start"] = json!(Pose {
+                position: [center[0], center[1] + diagonal, center[2]],
+                look_at: center
+            });
+        }
+        result["pending_pages"] = json!(self.root.chunks.keys().collect::<Vec<_>>());
+        Ok(result)
+    }
+    /// Verify a page and all currently decidable cross-page references before updating state.
+    /// Re-loading the same root-bound page is idempotent; a new root creates a new index.
+    pub fn load_page(&mut self, key: &str, bytes: &[u8]) -> Result<Page> {
+        let page = self.root.load_page(key, bytes)?;
+        if self.pages.contains_key(key) {
+            return Ok(page);
+        }
+        let mut payloads = BTreeMap::new();
+        let mut texture_sets = BTreeMap::new();
+        for entity in &page.entities {
+            require(
+                !self.entities.contains_key(&entity.id),
+                "duplicate_id",
+                "entity occurs on multiple owner pages",
+            )?;
+            for (path, descriptor) in entity.payloads() {
+                if let Some(previous) = payloads.get(path).or_else(|| self.payloads.get(path)) {
+                    require(
+                        previous == &descriptor,
+                        "length_mismatch",
+                        "shared payload descriptor mismatch",
+                    )?;
+                }
+                payloads.insert(path.to_owned(), descriptor);
+            }
+            for (asset, textures) in [
+                (&entity.asset, &entity.textures.asset),
+                (&entity.lod1, &entity.textures.lod1),
+            ] {
+                if let Some(previous) = texture_sets
+                    .get(&asset.sha256)
+                    .or_else(|| self.texture_sets.get(&asset.sha256))
+                {
+                    require(
+                        previous == textures,
+                        "invalid_texture",
+                        "shared GLB texture declarations differ",
+                    )?;
+                }
+                texture_sets.insert(asset.sha256.clone(), textures.clone());
+            }
+            for chunk in self.profile.intersections(&entity.bounds_mm)? {
+                let covered = chunk_key(chunk);
+                require(
+                    self.root.chunks.contains_key(&covered),
+                    "invalid_index",
+                    "root omits an occupied coverage page",
+                )?;
+                if covered != key
+                    && let Some(loaded) = self.pages.get(&covered)
+                {
+                    require(
+                        loaded
+                            .foreign
+                            .iter()
+                            .any(|r| r.id == entity.id && r.owner == key),
+                        "invalid_index",
+                        "coverage page omits foreign entity",
+                    )?;
+                }
+            }
+        }
+        let foreign: BTreeMap<_, _> = page
+            .foreign
+            .iter()
+            .map(|r| (r.id.as_str(), r.owner.as_str()))
+            .collect();
+        if let Some((_, ids)) = self.chunks.get(key) {
+            for id in ids {
+                let entity = &self.entities[id];
+                require(
+                    foreign
+                        .get(id.as_str())
+                        .is_some_and(|owner| *owner == chunk_key(entity.owner_chunk)),
+                    "invalid_index",
+                    "page omits an already loaded foreign entity",
+                )?;
+            }
+        }
+        for reference in &page.foreign {
+            if self.pages.contains_key(&reference.owner) {
+                require(
+                    self.entities.get(&reference.id).is_some_and(|entity| {
+                        chunk_key(entity.owner_chunk) == reference.owner
+                            && self
+                                .chunks
+                                .get(key)
+                                .is_some_and(|(_, ids)| ids.contains(&reference.id))
+                    }),
+                    "invalid_index",
+                    "foreign reference differs from its owner page",
+                )?;
+            }
+        }
+        let owned: BTreeMap<_, _> = page
+            .entities
+            .iter()
+            .map(|entity| (entity.id.as_str(), entity))
+            .collect();
+        for (covered, loaded) in &self.pages {
+            for reference in loaded.foreign.iter().filter(|r| r.owner == key) {
+                let entity = owned.get(reference.id.as_str()).ok_or_else(|| {
+                    crate::Error::new("invalid_index", "foreign entity absent from owner page")
+                })?;
+                require(
+                    self.profile
+                        .intersections(&entity.bounds_mm)?
+                        .into_iter()
+                        .any(|chunk| chunk_key(chunk) == *covered),
+                    "invalid_index",
+                    "foreign entity does not intersect the page",
+                )?;
+            }
+        }
+        for entity in &page.entities {
+            self.centers.insert(
+                entity.id.clone(),
+                std::array::from_fn(|a| {
+                    (entity.bounds_mm.min[a] + entity.bounds_mm.max[a]) as f64 / 2000.0
+                }),
+            );
+            self.assets.insert(
+                entity.id.clone(),
+                (entity.asset.sha256.clone(), entity.lod1.sha256.clone()),
+            );
+            for chunk in self.profile.intersections(&entity.bounds_mm)? {
+                self.chunks
+                    .entry(chunk_key(chunk))
+                    .or_insert_with(|| (chunk, BTreeSet::new()))
+                    .1
+                    .insert(entity.id.clone());
+            }
+            self.entities.insert(entity.id.clone(), entity.clone());
+        }
+        self.payloads.extend(payloads);
+        self.texture_sets.extend(texture_sets);
+        self.pages.insert(key.to_owned(), page.clone());
+        Ok(page)
     }
     /// Return disjoint `load`, `keep` and `unload` sets, and near/mid/far tier IDs.
     ///
@@ -380,29 +558,37 @@ impl Catalog {
             "hysteresis must be finite, at least one and within the distance budget",
         )?;
         require(
-            request.loaded.len() <= limits::WORLD_RECORDS
-                && request.loaded.iter().all(|(id, sha)| {
-                    self.assets
-                        .get(id)
-                        .is_some_and(|(full, mid)| sha == full || sha == mid)
-                }),
+            request.loaded.iter().all(|(id, sha)| {
+                self.assets
+                    .get(id)
+                    .is_some_and(|(full, mid)| sha == full || sha == mid)
+            }),
             "invalid_loaded",
             "loaded ID/SHA pairs must match catalog assets and fit its budget",
         )?;
         let p = &self.profile;
         let mut distances: BTreeMap<&String, f64> = BTreeMap::new();
         let mut selected = 0;
-        for (chunk, ids) in &self.chunks {
-            let lower: Metres = std::array::from_fn(|a| {
-                (p.origin_mm[a] + chunk[a] * p.chunk_size_mm[a]) as f64 / 1000.0
-            });
-            let distance = (0..3)
-                .map(|a| {
-                    let nearest =
-                        position[a].clamp(lower[a], lower[a] + p.chunk_size_mm[a] as f64 / 1000.0);
-                    (position[a] - nearest).powi(2)
-                })
-                .sum::<f64>();
+        let horizon = radii[2].max(retention).powi(2);
+        let mut missing_pages = BTreeSet::new();
+        for (key, chunk) in &self.root_chunks {
+            if chunk_distance(p, *chunk, position) <= horizon {
+                if let Some(page) = self.pages.get(key) {
+                    for reference in &page.foreign {
+                        if !self.pages.contains_key(&reference.owner) {
+                            missing_pages.insert(reference.owner.clone());
+                        }
+                    }
+                } else {
+                    missing_pages.insert(key.clone());
+                }
+            }
+        }
+        for (chunk, ids) in self.chunks.values() {
+            let distance = chunk_distance(p, *chunk, position);
+            if distance > horizon {
+                continue;
+            }
             if distance <= radii[1].powi(2) {
                 selected += 1;
             }
@@ -413,19 +599,25 @@ impl Catalog {
                     .or_insert(distance);
             }
         }
-        let mut ordered: Vec<_> = self.centers.keys().collect();
-        let distance = |id: &String| {
-            (0..3)
-                .map(|a| (self.centers[id][a] - position[a]).powi(2))
-                .sum::<f64>()
-        };
-        ordered.sort_by(|a, b| distance(a).total_cmp(&distance(b)).then_with(|| a.cmp(b)));
+        for id in request.loaded.keys() {
+            distances.entry(id).or_insert(f64::INFINITY);
+        }
+        let mut ordered: Vec<_> = distances
+            .into_iter()
+            .map(|(id, chunk_distance)| {
+                let center = self.centers[id];
+                let center_distance = (0..3)
+                    .map(|a| (center[a] - position[a]).powi(2))
+                    .sum::<f64>();
+                (id, chunk_distance, center_distance)
+            })
+            .collect();
+        ordered.sort_by(|a, b| a.2.total_cmp(&b.2).then_with(|| a.0.cmp(b.0)));
         let (mut load, mut keep, mut unload) = (Vec::new(), Vec::new(), Vec::new());
         let (mut near, mut mid, mut far) = (Vec::new(), Vec::new(), Vec::new());
         let mut visible = Vec::new();
         let mut hidden = Vec::new();
-        for id in ordered {
-            let d = distances[id];
+        for (id, d, _) in ordered {
             let mounted = request.loaded.get(id);
             let (full, lod1) = &self.assets[id];
             // Equal SHAs are identical bytes: treat a mounted copy as full for
@@ -467,12 +659,41 @@ impl Catalog {
         }
         Ok(json!({
             "load": load, "keep": keep, "unload": unload,
+            "missing_pages": missing_pages,
             "impostor_hidden": hidden, "impostor_visible": visible,
             "tiers": {"near": near, "mid": mid, "far": far},
             "selected_chunks": selected, "chunk": current, "chunk_key": chunk_key(current)
         }))
     }
 }
+fn chunk_distance(profile: &Profile, chunk: Point, position: Metres) -> f64 {
+    (0..3)
+        .map(|a| {
+            let lower =
+                (profile.origin_mm[a] + chunk[a] * profile.chunk_size_mm[a]) as f64 / 1000.0;
+            let nearest =
+                position[a].clamp(lower, lower + profile.chunk_size_mm[a] as f64 / 1000.0);
+            (position[a] - nearest).powi(2)
+        })
+        .sum()
+}
+
+/// Return only the entity and coverage additions for a newly loaded page.
+pub fn page_layout(profile: &Profile, page: &Page) -> Result<Value> {
+    let entities: BTreeMap<_, _> = page.entities.iter().map(|entity| {
+        (&entity.id, json!({"position": metres(entity.position_mm),
+            "bounds": {"min": metres(entity.bounds_mm.min), "max": metres(entity.bounds_mm.max)}, "focus": focus(entity)}))
+    }).collect();
+    let index = crate::spatial::build_index(profile, &page.entities)?;
+    Ok(
+        json!({"entities": entities, "known": index, "impostors": page.entities.iter().map(|entity| json!({
+        "id": entity.id,
+        "center_m": std::array::from_fn::<_, 3, _>(|a| (entity.bounds_mm.min[a] + entity.bounds_mm.max[a]) as f64 / 2000.0),
+        "size_m": std::array::from_fn::<_, 3, _>(|a| (entity.bounds_mm.max[a] - entity.bounds_mm.min[a]) as f64 / 1000.0)
+    })).collect::<Vec<_>>() }),
+    )
+}
+
 /// A chunk-map layout request, fully checked by [`map`].
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

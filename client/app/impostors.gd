@@ -6,9 +6,12 @@ const AVAILABLE := Color(.43, .62, .67, .45)
 const MISSING := Color(1.0, .38, .12, .72)
 const INVALID := Color(.95, .15, .32, .72)
 var instances: Dictionary = {}
+var visible_instances: Dictionary = {}
 
 
 func setup(items: Array) -> void:
+	instances.clear()
+	visible_instances.clear()
 	multimesh = MultiMesh.new()
 	multimesh.transform_format = MultiMesh.TRANSFORM_3D
 	multimesh.use_colors = true
@@ -28,6 +31,7 @@ func setup(items: Array) -> void:
 		var center := Core.vec(item.center_m)
 		var size_m := Core.vec(item.size_m)
 		var placement := Transform3D(Basis.from_scale(size_m), center)
+		visible_instances[item.id] = true
 		instances[item.id] = {"index": index, "transform": placement, "visible": true, "error": ""}
 		multimesh.set_instance_transform(index, placement)
 		multimesh.set_instance_color(index, AVAILABLE)
@@ -41,6 +45,10 @@ func set_visible_entity(id: String, show_box: bool) -> void:
 		return
 	var item: Dictionary = instances[id]
 	item.visible = show_box
+	if show_box:
+		visible_instances[id] = true
+	else:
+		visible_instances.erase(id)
 	multimesh.set_instance_transform(
 		item.index,
 		(
@@ -57,8 +65,11 @@ func apply(visible_ids: Array, hidden_ids: Array) -> void:
 		visible_set[id] = true
 	for id: String in hidden_ids:
 		visible_set.erase(id)
-	for id: String in instances:
-		set_visible_entity(id, visible_set.has(id))
+	for id: String in visible_instances.keys():
+		if not visible_set.has(id):
+			set_visible_entity(id, false)
+	for id: String in visible_set:
+		set_visible_entity(id, true)
 
 
 func reject(id: String, error: String, code: String) -> void:

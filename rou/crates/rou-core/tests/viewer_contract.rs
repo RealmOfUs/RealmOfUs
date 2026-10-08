@@ -1,14 +1,14 @@
 #[path = "../../../tests/common/mod.rs"]
 mod common;
-use rou_core::{documents::Manifest, ops, spatial::Profile, viewer};
+use rou_core::{documents::Preview, ops, spatial::Profile, viewer};
 use serde_json::json;
 
-fn manifest() -> Manifest {
+fn manifest() -> Preview {
     let (world, records) = common::world();
     world.projections(&records).unwrap().manifest().unwrap()
 }
 
-fn distinct_manifest() -> Manifest {
+fn distinct_manifest() -> Preview {
     let mut world = manifest();
     for entity in &mut world.entities {
         entity.lod1.sha256 = rou_core::json::digest(entity.id.as_bytes());

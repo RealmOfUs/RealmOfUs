@@ -2,7 +2,7 @@
 #include <assert.h>
 #include <string.h>
 int main(void) {
-  assert(rou_abi_version() == 2);
+  assert(rou_abi_version() == 3);
   RouBuf response = {0};
   const char *input = "{\"a\":1}";
   assert(rou_call("json.strict", (const uint8_t *)input, strlen(input), &response) == 0);

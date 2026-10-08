@@ -74,7 +74,7 @@ func run_checks() -> void:
 			check(result.value.size() == case.chunk_count, "Reviewed coverage budget")
 	for case: Dictionary in vectors.catalogs:
 		check(
-			Core.invoke("manifest.validate", changed(vectors.catalog, case)).ok == case.accepted,
+			Core.invoke("preview.validate", changed(vectors.catalog, case)).ok == case.accepted,
 			"Catalog: " + case.name
 		)
 	for malformed: PackedByteArray in [
@@ -108,6 +108,7 @@ func adapt_catalog_fixture(value: Variant) -> void:
 			value.format = Core.config().formats.preview
 		if value.has("asset") and value.asset.has("path"):
 			value.lod1 = value.asset.duplicate(true)
+			value.textures = {"asset": [], "lod1": []}
 		for child: Variant in value.values():
 			adapt_catalog_fixture(child)
 	elif value is Array:

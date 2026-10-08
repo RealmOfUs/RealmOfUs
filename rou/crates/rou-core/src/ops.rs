@@ -14,6 +14,8 @@
 //! | `file.descriptor` | Raw payload bytes | [`Descriptor`] |
 //! | `glb.precheck` | Complete GLB | [`glb::Report`] |
 //! | `glb.inspect` | Complete GLB | `{metrics, descriptor}` |
+//! | `glb.externalise` | Embedded exporter GLB | [`glb::Externalised`] relocation plan, image ranges and metrics |
+//! | `image.inspect` | PNG/JPEG bytes | `{descriptor, metrics}` |
 //! | `lfs.pointer` | Pointer or payload bytes | Pointer [`Descriptor`], or `null` for a non-pointer |
 //! | `config` | Ignored; empty bytes allowed | ABI, profile, viewer defaults, limits.safety, limits.reference and format/path constants |
 //!
@@ -31,9 +33,14 @@
 //! | `profile.validate` | [`Profile`] | Fully validated profile |
 //! | `profile.calibration` | Integer `16`, `32` or `64` metres | Profile for grid comparison experiments |
 //! | `realm.validate` / `model.validate` / `entity.validate` | [`Realm`] / [`Model`] / [`Entity`] | Validated document |
-//! | `manifest.validate` | [`Manifest`] | Fully validated catalog |
+//! | `manifest.validate` | [`Manifest`] | Validated root; does not claim page availability |
+//! | `page.validate` | `{root, key, page}` with raw page text | Validated root-bound page |
+//! | `bundle.validate` | `{root, pages}` with exact page text by path | Root plus sorted entities after complete graph validation |
+//! | `preview.project` / `preview.validate` | Drafts as for `preview.create` / [`Preview`] | Internal complete projection for developer spatial probes, never a disk root |
+//! | `texture.match` | `{texture, actual, metrics}` | Exact identity and extension check |
+//! | `glb.textures` | `{metrics, textures, images}` | Exact URI-set and aggregate decoded-image validation |
 //! | `world.metadata` | [`World`] | `true` after metadata validation, without requiring cold input descriptors |
-//! | `preview.create` | `{profile, entities}`; entities have id, optional label, position_mm, bounds_mm, asset, lod1 | [`Manifest`] with derived owners, offsets and index |
+//! | `preview.create` | `{profile, entities}`; entities have id, optional label, position_mm, bounds_mm, asset, lod1, textures | `{root, pages}` with exact root-bound page strings |
 //! | `build.validate` | `{profile, model, inputs, record}` | Record after [`Build::validate`] |
 //! | `build.input_digest` | `{profile, model, inputs}` | [`input_digest`] string |
 //! | `version.validate` | `{version, catalog}`, catalog is the raw catalog text string | Sidecar after [`Version::validate`] |
@@ -49,7 +56,7 @@
 //! | `blender.relative_path` | `{source, reference}` | Safe relative path from [`blender::relative_path`] |
 //! | `world.diff` | `{before, after}`, either world may be null | Semantic change object from [`world::diff`] |
 //! | `session.fingerprint` | `{world, source}` | Baseline digest from [`world::session_fingerprint`] |
-//! | `viewer.catalog` / `viewer.start` | [`Manifest`] | Viewer layout including all impostor bounds / default overview pose |
+//! | `viewer.catalog` / `viewer.start` | [`Preview`] | Viewer layout including all impostor bounds / default overview pose |
 //! | `viewer.radii` | Three metre radii | Validated ordered near/middle/far radii |
 //! | `viewer.at` | `x,y,z` JSON string in metres | Three-component metre coordinates |
 //! | `viewer.aim` | `{position, look_at}` in metres | Pose with coincident-target fallback |
@@ -67,7 +74,7 @@
 use crate::{
     Error, Result, blender,
     documents::*,
-    formats, glb, json, lfs, limits, paths,
+    formats, glb, image, json, lfs, limits, paths,
     spatial::{Bounds, Profile},
     world::{self, World},
 };
@@ -190,6 +197,7 @@ struct PreviewDraft {
     bounds_mm: Bounds,
     asset: Asset,
     lod1: Asset,
+    textures: Textures,
 }
 
 /// Dispatch an operation and return its JSON-encoded result without a response envelope.
@@ -232,6 +240,51 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
             let value = Descriptor::of(input);
             value.validate_shape()?;
             serde_json::to_value(value)?
+        }
+        "glb.externalise" => serde_json::to_value(glb::externalise(input)?)?,
+        "image.inspect" => {
+            json!({"metrics": image::precheck(input)?, "descriptor": Descriptor::of(input)})
+        }
+        "glb.textures" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Request {
+                metrics: glb::Report,
+                textures: Vec<Texture>,
+                images: BTreeMap<String, image::Report>,
+            }
+            let request: Request = json::parse(input)?;
+            for texture in &request.textures {
+                texture.validate_shape()?;
+            }
+            request.metrics.match_textures(&request.textures)?;
+            serde_json::to_value(request.metrics.with_images(&request.images)?)?
+        }
+        "texture.match" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Request {
+                texture: Texture,
+                actual: Descriptor,
+                metrics: image::Report,
+            }
+            let request: Request = json::parse(input)?;
+            request.texture.validate_shape()?;
+            request.metrics.validate()?;
+            crate::error::require(
+                request.texture.descriptor() == request.actual,
+                "asset_mismatch",
+                "texture hash or size mismatch",
+            )?;
+            crate::error::require(
+                request
+                    .texture
+                    .filename()
+                    .ends_with(&format!(".{}", request.metrics.extension)),
+                "invalid_image",
+                "image signature and extension differ",
+            )?;
+            json!(true)
         }
         "glb.precheck" => serde_json::to_value(glb::precheck(input)?)?,
         "glb.inspect" => {
@@ -320,8 +373,62 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
             value.validate()?;
             serde_json::to_value(value)?
         }
-        "preview.create" => {
-            let request: PreviewRequest = json::parse(input)?;
+        "page.validate" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Request {
+                root: Manifest,
+                key: String,
+                page: String,
+            }
+            // The envelope contains two independently bounded JSON documents.
+            let request: Request =
+                json::from_value(json::strict_with_limit(input, limits::JSON_BYTES * 8)?)?;
+            request.root.validate()?;
+            serde_json::to_value(
+                request
+                    .root
+                    .load_page(&request.key, request.page.as_bytes())?,
+            )?
+        }
+        "bundle.validate" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Request {
+                root: Manifest,
+                pages: BTreeMap<String, String>,
+            }
+            // Tooling aggregates many independently bounded on-disk documents.
+            let request: Request = json::from_value(json::strict_with_limit(input, usize::MAX)?)?;
+            let mut catalog = crate::viewer::Catalog::load_root(&request.root)?;
+            crate::error::require(
+                request.pages.len() == request.root.chunks.len(),
+                "invalid_index",
+                "bundle page set differs from root",
+            )?;
+            let mut entities = Vec::new();
+            for (key, descriptor) in &request.root.chunks {
+                let bytes = request
+                    .pages
+                    .get(&descriptor.page)
+                    .ok_or_else(|| Error::new("invalid_index", "bundle page absent"))?;
+                entities.extend(catalog.load_page(key, bytes.as_bytes())?.entities);
+            }
+            entities.sort_by(|a, b| a.id.cmp(&b.id));
+            let mut result = serde_json::to_value(request.root)?;
+            result["entities"] = serde_json::to_value(entities)?;
+            result
+        }
+        "preview.validate" => {
+            let value: Preview = json::parse(input)?;
+            value.validate()?;
+            serde_json::to_value(value)?
+        }
+        "preview.create" | "preview.project" => {
+            // Authoring aggregation is not an on-disk document. Each emitted root/page
+            // has its own byte/record budget; the world has no independent entity cap.
+            let request: PreviewRequest =
+                json::from_value(json::strict_with_limit(input, usize::MAX)?)?;
             let mut entities = Vec::new();
             for entity in request.entities {
                 let (owner_chunk, offset_mm) = request.profile.owner(entity.position_mm)?;
@@ -334,10 +441,11 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
                     bounds_mm: entity.bounds_mm,
                     asset: entity.asset,
                     lod1: entity.lod1,
+                    textures: entity.textures,
                 });
             }
             entities.sort_by(|a, b| a.id.cmp(&b.id));
-            let manifest = Manifest {
+            let manifest = Preview {
                 format: formats::PREVIEW.into(),
                 profile_hash: json::hash(&request.profile)?,
                 chunks: crate::spatial::build_index(&request.profile, &entities)?,
@@ -346,7 +454,11 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
                 entities,
             };
             manifest.validate()?;
-            serde_json::to_value(manifest)?
+            if op == "preview.project" {
+                serde_json::to_value(manifest)?
+            } else {
+                serde_json::to_value(manifest.bundle()?)?
+            }
         }
         "build.validate" => {
             let request: BuildRequest = json::parse(input)?;
@@ -472,6 +584,7 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
                     "json_bytes": limits::JSON_BYTES,
                     "json_depth": limits::JSON_DEPTH,
                     "glb_bytes": limits::GLB_BYTES,
+                    "image_bytes": limits::GLB_BYTES,
                     "glb_json_bytes": limits::GLB_JSON_BYTES,
                     "file_bytes": limits::FILE_BYTES,
                     "pointer_bytes": limits::POINTER_BYTES,
@@ -488,7 +601,7 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
                     "chunk_size_mm": limits::CHUNK_SIZE_MM,
                     "world_chunks": limits::WORLD_CHUNKS,
                     "entity_chunks": limits::ENTITY_CHUNKS,
-                    "world_records": limits::WORLD_RECORDS,
+                    "page_records": limits::PAGE_RECORDS,
                     "dependencies": limits::DEPENDENCIES,
                     "dependency_depth": limits::DEPENDENCY_DEPTH,
                     "id_bytes": limits::ID_BYTES,

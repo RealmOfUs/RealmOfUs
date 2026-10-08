@@ -197,7 +197,7 @@ func opened() -> void:
 			% [
 				descriptor.realm_id,
 				commit if not commit.is_empty() else "Uncommitted worktree view",
-				host.catalog.size(),
+				host.manifest.entity_count,
 				host.total_chunks
 			]
 		)
@@ -231,6 +231,13 @@ func fill_entities() -> void:
 		entity_list.add_item(name)
 
 
+func tier_bytes(entity: Dictionary, tier: String) -> int:
+	var total: int = entity[tier].bytes
+	for texture: Dictionary in entity.textures[tier]:
+		total += int(texture.bytes)
+	return total
+
+
 func select_entity(id: String) -> void:
 	if not host.catalog.has(id):
 		return
@@ -242,8 +249,8 @@ func select_entity(id: String) -> void:
 			entity.get("label", id),
 			id,
 			str(entity.owner_chunk),
-			entity.asset.bytes / 1024.0,
-			entity.lod1.bytes / 1024.0
+			tier_bytes(entity, "asset") / 1024.0,
+			tier_bytes(entity, "lod1") / 1024.0
 		]
 	)
 	if host.rejected.has(id):

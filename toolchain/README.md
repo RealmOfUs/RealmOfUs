@@ -69,7 +69,7 @@ After renaming a registered author root, run "register entities" before saving a
 
 The real Preferences install and enable/disable test in `make test-addon` runs with `BLENDER_USER_*` pointed at `build/addon-install/`, so it never writes your user configuration.
 
-The add-on's local preview writes `rou-preview/0.2` with full/lod1 descriptors into `realm.json` and both payloads into `objects/`; without a version sidecar the viewer shows the bundle as unbound. Git staging and commits stay explicit author actions; the session guard cannot intercept external programs or native Blender saves.
+The add-on's local preview writes `rou-preview/0.3` as a small `realm.json` root with hashed `chunks/` pages containing full/lod1 descriptors and texture lists; geometry and shared image payloads go into `objects/`; without a version sidecar the viewer shows the bundle as unbound. Git staging and commits stay explicit author actions; the session guard cannot intercept external programs or native Blender saves.
 
 On macOS, packaging ad-hoc signs the dylib inside the ZIP and verifies it with `codesign --verify --strict`. This is neither Developer ID signing nor notarisation. A delivery probe records quarantine attributes, `spctl` and the real Blender load result on isolated copies without changing system policy:
 

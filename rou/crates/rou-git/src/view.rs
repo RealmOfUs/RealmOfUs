@@ -7,12 +7,12 @@ use crate::{
 };
 use rou_core::{
     documents::{Manifest, Version},
-    formats, glb, json, limits, paths,
+    formats, glb, image, json, limits, paths,
     selection::Selection,
 };
 use serde::Serialize;
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeMap, BTreeSet},
     fs,
     path::{Path, PathBuf},
 };
@@ -84,7 +84,9 @@ impl Repository {
         let temporary = tempfile::Builder::new()
             .prefix(".rou-view-")
             .tempdir_in(parent)?;
-        let manifest = validated.view.manifest()?;
+        let preview = validated.view.manifest()?;
+        let bundle = preview.bundle()?;
+        let manifest = &bundle.root;
         let fetch = selection.is_some();
         let selection = match selection {
             Some(selection) => selection.clone(),
@@ -97,24 +99,23 @@ impl Repository {
             .collect();
         fs::create_dir(temporary.path().join("objects"))?;
         let mut provided = BTreeSet::new();
+        let mut glbs = BTreeMap::new();
+        let mut images = BTreeMap::new();
         for entity in &validated.view.entities {
             if !selected.contains(&entity.id) {
                 continue;
             }
-            for asset in [&entity.asset, &entity.lod1] {
-                if !provided.contains(&asset.sha256) {
-                    let descriptor = asset.descriptor();
-                    let working = validated.snapshot.working_path(&asset.path)?;
+            for (path, descriptor) in entity.payloads() {
+                let object = bundle_object(path, &descriptor.sha256);
+                if !provided.contains(&object) {
+                    let working = validated.snapshot.working_path(path)?;
                     let local = working.is_file()
                         && working.metadata()?.len() == descriptor.bytes
                         && validated.snapshot.hash_working_file(&working)? == descriptor;
                     let source = if local {
                         working
                     } else {
-                        match validated
-                            .snapshot
-                            .payload_path(&asset.path, &descriptor, fetch)
-                        {
+                        match validated.snapshot.payload_path(path, &descriptor, fetch) {
                             Ok(path) => path,
                             Err(error)
                                 if !fetch && error.downcast_ref::<MissingPayload>().is_some() =>
@@ -124,27 +125,61 @@ impl Repository {
                             Err(error) => return Err(error),
                         }
                     };
-                    let destination = temporary.path().join(paths::object(&asset.sha256));
+                    let destination = temporary.path().join(&object);
                     if !local || fs::hard_link(&source, &destination).is_err() {
                         fs::copy(&source, &destination)?;
                     }
                     // Verify the published inode or copy, not only the earlier source snapshot.
                     let bytes = io::read(&destination, limits::GLB_BYTES)?;
                     descriptor.verify(&bytes)?;
-                    glb::precheck(&bytes)?;
-                    provided.insert(asset.sha256.clone());
+                    if path.ends_with(".glb") {
+                        glbs.insert(object.clone(), glb::precheck(&bytes)?);
+                    } else {
+                        let report = image::precheck(&bytes)?;
+                        ensure!(
+                            "invalid_image",
+                            path.ends_with(&format!(".{}", report.extension)),
+                            "image signature and extension differ"
+                        );
+                        images.insert(object.clone(), report);
+                    }
+                    provided.insert(object);
                 }
             }
         }
 
+        for entity in &preview.entities {
+            for (asset, textures) in [
+                (&entity.asset, &entity.textures.asset),
+                (&entity.lod1, &entity.textures.lod1),
+            ] {
+                if let Some(report) = glbs.get(&asset.path) {
+                    report.match_textures(textures)?;
+                    if textures
+                        .iter()
+                        .all(|texture| images.contains_key(&texture.path))
+                    {
+                        report.clone().with_images(
+                            &textures
+                                .iter()
+                                .map(|texture| {
+                                    (texture.filename().to_owned(), images[&texture.path].clone())
+                                })
+                                .collect(),
+                        )?;
+                    }
+                }
+            }
+        }
         let included: BTreeSet<_> = validated
             .view
             .entities
             .iter()
             .filter(|entity| {
                 selected.contains(&entity.id)
-                    && provided.contains(&entity.asset.sha256)
-                    && provided.contains(&entity.lod1.sha256)
+                    && entity.payloads().all(|(path, descriptor)| {
+                        provided.contains(&bundle_object(path, &descriptor.sha256))
+                    })
             })
             .map(|entity| entity.id.clone())
             .collect();
@@ -160,11 +195,18 @@ impl Repository {
             .entities
             .iter()
             .filter(|entity| {
-                provided.contains(&entity.asset.sha256) && provided.contains(&entity.lod1.sha256)
+                entity.payloads().all(|(path, descriptor)| {
+                    provided.contains(&bundle_object(path, &descriptor.sha256))
+                })
             })
             .map(|entity| &validated.world.entities[&entity.id].model)
             .collect::<BTreeSet<_>>()
             .len();
+        for (path, bytes) in &bundle.pages {
+            io::atomic_write(&temporary.path().join(path), bytes.as_bytes())?;
+        }
+        // Empty worlds still have the same safe directory layout.
+        fs::create_dir_all(temporary.path().join("chunks"))?;
         let catalog = json::pretty(&manifest)?;
         let version = Version {
             format: formats::GIT_VIEW.into(),
@@ -201,12 +243,24 @@ impl Repository {
         Ok(ViewReport {
             ok: true,
             manifest: output.join(paths::REALM),
-            entity_count: manifest.entities.len(),
+            entity_count: manifest.entity_count,
             downloaded_entities: included.into_iter().collect(),
             version,
             model_count,
             included_models,
         })
+    }
+}
+
+fn bundle_object(path: &str, sha: &str) -> String {
+    if path.ends_with(".glb") {
+        paths::object(sha)
+    } else {
+        format!(
+            "{}{}",
+            paths::OBJECTS,
+            path.rsplit('/').next().expect("validated texture path")
+        )
     }
 }
 
@@ -232,7 +286,8 @@ fn check_output(output: &Path) -> Result<()> {
         if name == ".DS_Store" && kind.is_file() {
             continue;
         }
-        if name == "objects" {
+        if name == "objects" || name == "chunks" {
+            let chunks = name == "chunks";
             ensure!(
                 "invalid_layout",
                 kind.is_dir(),
@@ -252,13 +307,20 @@ fn check_output(output: &Path) -> Result<()> {
                 let name = name.to_str().ok_or_else(|| {
                     crate::error::HostError::new("invalid_layout", "invalid object filename")
                 })?;
-                let hash = name.strip_suffix(".glb").ok_or_else(|| {
-                    crate::error::HostError::new(
+                if chunks {
+                    let key = name
+                        .strip_suffix(".json")
+                        .context("unrelated file in chunks directory")?;
+                    rou_core::spatial::parse_chunk(key)?;
+                } else if let Some(hash) = name.strip_suffix(".glb") {
+                    rou_core::documents::hash_shape(hash)?;
+                } else {
+                    ensure!(
                         "invalid_layout",
-                        "unrelated file in objects directory",
-                    )
-                })?;
-                rou_core::documents::hash_shape(hash)?;
+                        rou_core::documents::Texture::uri(name).is_ok(),
+                        "unrelated file in objects directory"
+                    );
+                }
             }
         } else {
             ensure!(

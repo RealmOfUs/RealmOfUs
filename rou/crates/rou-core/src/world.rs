@@ -74,12 +74,6 @@ impl World {
     /// return `dependency_cycle`; excessive dependency depth returns `dependency_budget`.
     pub fn validate_metadata(&self) -> Result<()> {
         self.realm.validate()?;
-        require(
-            self.models.len() <= limits::WORLD_RECORDS
-                && self.entities.len() <= limits::WORLD_RECORDS,
-            "world_budget",
-            "too many models or entities",
-        )?;
         let mut graph: BTreeMap<&str, BTreeSet<&str>> = self
             .models
             .values()
@@ -188,6 +182,7 @@ impl World {
                 bounds_mm,
                 asset: record.asset.clone(),
                 lod1: record.lod1.clone(),
+                textures: record.textures.clone(),
             });
         }
         Ok(View {
@@ -267,14 +262,22 @@ impl View {
     ///
     /// # Errors
     ///
-    /// Return [`Manifest::validate`] errors if the generated catalog fails validation.
-    pub fn manifest(&self) -> Result<Manifest> {
+    /// Return [`Preview::validate`] errors if the generated catalog fails validation.
+    pub fn manifest(&self) -> Result<Preview> {
         let mut entities = self.entities.clone();
         for entity in &mut entities {
             entity.asset.path = paths::object(&entity.asset.sha256);
             entity.lod1.path = paths::object(&entity.lod1.sha256);
+            for texture in entity
+                .textures
+                .asset
+                .iter_mut()
+                .chain(&mut entity.textures.lod1)
+            {
+                texture.path = format!("{}{}", paths::OBJECTS, texture.filename());
+            }
         }
-        let result = Manifest {
+        let result = Preview {
             format: formats::PREVIEW.into(),
             profile: self.profile.clone(),
             profile_hash: self.profile_hash.clone(),

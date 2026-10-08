@@ -10,6 +10,20 @@ use std::{
     process::{Command, Output},
 };
 
+fn bundle_entities(directory: &Path) -> Vec<PreviewEntity> {
+    let root: Manifest = json::parse(&fs::read(directory.join("realm.json")).unwrap()).unwrap();
+    let mut catalog = rou_core::viewer::Catalog::load_root(&root).unwrap();
+    root.chunks
+        .iter()
+        .flat_map(|(key, descriptor)| {
+            catalog
+                .load_page(key, &fs::read(directory.join(&descriptor.page)).unwrap())
+                .unwrap()
+                .entities
+        })
+        .collect()
+}
+
 struct Fixture {
     _temp: tempfile::TempDir,
     root: PathBuf,
@@ -38,7 +52,7 @@ impl Fixture {
             .unwrap();
         }
         fs::write(&blender,r#"#!/usr/bin/env python3
-import json,sys,pathlib,hashlib
+import json,sys,pathlib,hashlib,shutil
 request=pathlib.Path(sys.argv[sys.argv.index('--request')+1])
 r=json.loads(request.read_text())
 outputs=[]
@@ -55,7 +69,11 @@ for model in r['models']:
     metrics=json.loads(pathlib.Path(__file__).with_name('metrics.json').read_text())
     metrics['bytes']=len(data)
     lod1_metrics=json.loads(pathlib.Path(__file__).with_name('lod1-metrics.json').read_text())
-    outputs.append(dict(id=model['id'],asset=dict(path=model['asset_path'],**descriptor),lod1=dict(path=model['lod1_path'],**lod1_descriptor),metrics=dict(asset=metrics,lod1=lod1_metrics),bounds_blender_m=[[0,0,0],[1,1,1]],dependencies=['sources/shared/wood.png']))
+    texture_file=pathlib.Path(__file__).with_name('textures.json')
+    textures=json.loads(texture_file.read_text()) if texture_file.exists() else []
+    for texture in textures:
+        shutil.copyfile(pathlib.Path(__file__).with_name(pathlib.Path(texture['path']).name), pathlib.Path(r['output_dir'])/texture['path'])
+    outputs.append(dict(id=model['id'],asset=dict(path=model['asset_path'],**descriptor),lod1=dict(path=model['lod1_path'],**lod1_descriptor),metrics=dict(asset=metrics,lod1=lod1_metrics),textures=dict(asset=textures,lod1=textures),bounds_blender_m=[[0,0,0],[1,1,1]],dependencies=['sources/shared/wood.png']))
 report=dict(format=r['response_format'],models=outputs,tool_versions=dict(exporter=r['response_format'],blender='test double'))
 pathlib.Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps(report))
 "#).unwrap();
@@ -71,6 +89,61 @@ pathlib.Path(sys.argv[sys.argv.index('--output')+1]).write_text(json.dumps(repor
         };
         fixture.rou(&fixture.root, &["init"]);
         fixture
+    }
+    fn shared_texture(&self, revision: usize) -> Texture {
+        let image = [
+            b"\x89PNG\r\n\x1a\n".as_slice(),
+            &13_u32.to_be_bytes(),
+            b"IHDR",
+            &8_u32.to_be_bytes(),
+            &8_u32.to_be_bytes(),
+        ]
+        .concat();
+        let texture = Texture {
+            path: format!("runtime/{}.png", json::digest(&image)),
+            sha256: json::digest(&image),
+            bytes: image.len() as u64,
+        };
+        for (file, metrics, (mut document, mut binary)) in [
+            ("triangle.glb", "metrics.json", common::triangle()),
+            (
+                "triangle-lod1.glb",
+                "lod1-metrics.json",
+                common::triangle_lod1(),
+            ),
+        ] {
+            document["extras"] = value!({"revision":revision});
+            document["bufferViews"]
+                .as_array_mut()
+                .unwrap()
+                .push(value!({"buffer":0,"byteOffset":binary.len(),"byteLength":image.len()}));
+            binary.extend(&image);
+            document["buffers"][0]["byteLength"] = value!(binary.len());
+            document["images"] = value!([{"bufferView":1,"mimeType":"image/png"}]);
+            let input = common::glb(&document, &binary);
+            let plan = rou_core::glb::externalise(&input).unwrap();
+            fs::write(
+                self._temp.path().join(file),
+                plan.materialize(&input).unwrap(),
+            )
+            .unwrap();
+            fs::write(
+                self._temp.path().join(metrics),
+                serde_json::to_vec(&plan.metrics).unwrap(),
+            )
+            .unwrap();
+        }
+        fs::write(
+            self._temp
+                .path()
+                .join(Path::new(&texture.path).file_name().unwrap()),
+            &image,
+        )
+        .unwrap();
+        fs::write(self._temp.path().join("textures.json"), serde_json::to_vec(&value!([{
+            "path":texture.path,"sha256":texture.sha256,"bytes":texture.bytes,"metrics":rou_core::image::precheck(&image).unwrap()
+        }])).unwrap()).unwrap();
+        texture
     }
     fn command_builder(&self, program: &str, root: &Path, args: &[&str]) -> Command {
         let mut command = Command::new(program);
@@ -204,7 +277,7 @@ fn init_readme_commit_and_human_status() {
     let output = f.rou(&f.root, &["view"]);
     let path = output["manifest"].as_str().unwrap();
     let manifest: Manifest = json::parse(&fs::read(path).unwrap()).unwrap();
-    assert!(manifest.entities.is_empty());
+    assert_eq!(manifest.entity_count, 0);
     let bundle = Path::new(path).parent().unwrap();
     fs::write(bundle.join(".DS_Store"), b"Finder metadata").unwrap();
     fs::write(bundle.join("objects/.DS_Store"), b"Finder metadata").unwrap();
@@ -1389,12 +1462,9 @@ fn browse_selection_is_offline_by_default_and_explicit_selectors_fetch_only_asse
     assert!(!trace.contains("git-lfs smudge") && !trace.contains("git-lfs fetch"));
     assert_eq!(fs::read_dir(bundle.join("objects")).unwrap().count(), 2);
     let catalog: Manifest = json::parse(&fs::read(bundle.join("realm.json")).unwrap()).unwrap();
-    assert_eq!(catalog.entities.len(), 2);
-    let house = catalog
-        .entities
-        .iter()
-        .find(|entity| entity.id == "house")
-        .unwrap();
+    assert_eq!(catalog.entity_count, 2);
+    let entities = bundle_entities(bundle);
+    let house = entities.iter().find(|entity| entity.id == "house").unwrap();
     assert_ne!(house.asset.sha256, house.lod1.sha256);
     for asset in [&house.asset, &house.lod1] {
         let bytes = fs::read(bundle.join(&asset.path)).unwrap();
@@ -1461,13 +1531,12 @@ fn browse_selection_is_offline_by_default_and_explicit_selectors_fetch_only_asse
     )
     .unwrap();
     let fixed = f.rou(&clone, &["view", "--entity", "house"]);
-    let fixed: Manifest =
-        json::parse(&fs::read(fixed["manifest"].as_str().unwrap()).unwrap()).unwrap();
-    let house = fixed
-        .entities
-        .iter()
-        .find(|entity| entity.id == "house")
-        .unwrap();
+    let entities = bundle_entities(
+        Path::new(fixed["manifest"].as_str().unwrap())
+            .parent()
+            .unwrap(),
+    );
+    let house = entities.iter().find(|entity| entity.id == "house").unwrap();
     for asset in [&house.asset, &house.lod1] {
         asset
             .descriptor()
@@ -1541,5 +1610,95 @@ fn build_rejects_oversized_output_descriptors_before_publication() {
     assert_eq!(
         previous,
         fs::read(f.root.join("runtime/house.json")).unwrap()
+    );
+}
+
+#[test]
+fn shared_textures_deduplicate_survive_deletion_and_repair_from_lfs_history() {
+    let f = Fixture::new();
+    let texture = f.shared_texture(0);
+    f.seed();
+    let mut third: Model =
+        json::parse(&fs::read(f.root.join(paths::model("bench"))).unwrap()).unwrap();
+    third.id = "third".into();
+    third.entry.name = "third".into();
+    f.write(&paths::model("third"), &json::pretty(&third).unwrap());
+    f.write(
+        &paths::entity("third"),
+        &json::pretty(&Entity {
+            format: formats::ENTITY.into(),
+            id: "third".into(),
+            model: "third".into(),
+            position_mm: [64000, 0, 0],
+            label: None,
+        })
+        .unwrap(),
+    );
+    assert_eq!(f.rou(&f.root, &["build"])["generated"], value!(["third"]));
+    f.rou(&f.root, &["add", "."]);
+    f.rou(
+        &f.root,
+        &["commit", "-m", "Third model shares both image tiers"],
+    );
+    let image = f.root.join(&texture.path);
+    let original = fs::read(&image).unwrap();
+    let pointer = f.git(&f.root, &["show", &format!("HEAD:{}", texture.path)]);
+    assert_eq!(
+        rou_core::lfs::pointer(&pointer).unwrap().unwrap(),
+        texture.descriptor()
+    );
+    assert_eq!(
+        fs::read_dir(f.root.join("runtime"))
+            .unwrap()
+            .filter(|e| e
+                .as_ref()
+                .unwrap()
+                .path()
+                .extension()
+                .is_some_and(|e| e == "png"))
+            .count(),
+        1
+    );
+    let lfs = f
+        .root
+        .join(".git/lfs/objects")
+        .join(&texture.sha256[..2])
+        .join(&texture.sha256[2..4])
+        .join(&texture.sha256);
+    assert_eq!(fs::read(&lfs).unwrap(), original);
+    f.shared_texture(1);
+    f.write("sources/house/house.blend", b"geometry revision");
+    let built = f.rou(&f.root, &["build"]);
+    assert_eq!(built["generated"], value!(["house"]));
+    assert_eq!(fs::read(&image).unwrap(), original);
+    f.rou(&f.root, &["add", "."]);
+    let staged = f.git(&f.root, &["diff", "--cached", "--name-only"]);
+    assert!(!String::from_utf8_lossy(&staged).contains(&texture.path));
+    f.rou(&f.root, &["commit", "-m", "Geometry revision"]);
+    // Simulate a merge removing the shared output while its surviving model still needs it.
+    f.git(&f.root, &["rm", &texture.path]);
+    assert!(!f.raw(&f.root, &["validate", "--staged"]).status.success());
+    let repaired = f.rou(&f.root, &["build"]);
+    assert_eq!(repaired["generated"], value!([]));
+    assert_eq!(fs::read(&image).unwrap(), original);
+    f.rou(&f.root, &["add", &texture.path]);
+    f.rou(&f.root, &["validate", "--staged"]);
+    fs::remove_file(f.root.join(paths::model("bench"))).unwrap();
+    fs::remove_file(f.root.join(paths::entity("bench"))).unwrap();
+    f.rou(&f.root, &["build"]);
+    assert_eq!(fs::read(&image).unwrap(), original);
+    fs::remove_file(f.root.join(paths::model("third"))).unwrap();
+    fs::remove_file(f.root.join(paths::entity("third"))).unwrap();
+    f.rou(&f.root, &["build"]);
+    assert_eq!(fs::read(&image).unwrap(), original);
+    fs::remove_file(f.root.join(paths::model("house"))).unwrap();
+    fs::remove_file(f.root.join(paths::entity("house"))).unwrap();
+    let deleted = f.rou(&f.root, &["build"]);
+    assert!(!image.exists());
+    assert!(
+        deleted["removed"]
+            .as_array()
+            .unwrap()
+            .contains(&value!(texture.path))
     );
 }
