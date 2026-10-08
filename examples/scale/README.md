@@ -71,3 +71,25 @@ including `detailed-report.json`.
 LOD decimates geometry and resamples oversized textures on copies. This three-model
 sample measures large individual assets and tier replacement; the 800-entity
 sample measures shared instances. Neither establishes a city-scale budget.
+
+## Scale bundles
+
+`make_bundle.py --count N` places N instances of the three calibration models and is what
+`make bench-viewer` uses (N = 800). Two options build the M4 scale bundles:
+
+- `--unique U` derives U byte-distinct GLB variants from the source models by tagging
+  `asset.generator`; geometry and textures are unchanged, so streaming sees U different SHAs.
+- `--lod1-only` uses each source lod1 for both tiers, which keeps textured bundles small.
+
+```bash
+python3 examples/scale/make_bundle.py --count 4096 --output build/scale/bundle-4096
+python3 examples/scale/make_bundle.py --source build/scale/detailed/.rou/view/worktree/realm.json \
+  --lod1-only --unique 64 --count 64 --output build/scale/textured-64
+godot --headless --path client/app --script ../tests/refresh_cost.gd -- \
+  --realm="$PWD/build/scale/bundle-4096/realm.json" --rounds=30
+```
+
+The textured source is the detailed sample (`make_detailed_realm.py`); the refresh probe prints
+one `REFRESH_COST` JSON line with the headless `refresh_assets()` cost. Results are recorded in
+`doc/status.md` under Scale measurements.
+

@@ -46,6 +46,8 @@ This builds the native adapters and opens `build/scale/detailed/.rou/view/worktr
 python3 toolchain/build/verify_detailed_display.py --activate \
   --realm build/scale/detailed/.rou/view/worktree/realm.json \
   --output build/scale/detailed-display
+godot --headless --path client/app --script ../tests/refresh_cost.gd -- \
+  --realm="$PWD/build/scale/bundle-800/realm.json" --rounds=30   # headless refresh cost
 ```
 
 `--activate` is macOS-only and activates the measured PID. On other platforms omit it and keep the window foreground. The harness requires 500 ms of continuous focus before opening the world and before each screenshot. It checks distinct full/lod1 hashes, mounted tiers, inspected image dimensions, no rejected assets or engine errors, and zero resident scenes and cached prototypes after release. It writes six PNGs, `display.log` and `report.json`, and prints one `DETAILED_DISPLAY_VERIFIED` JSON receipt with assertion count, screenshot paths, SHAs and image dimensions. Middle captures use a narrower camera FOV at 128 m from each entity center to permit texture inspection at comparable screen size; the receipt records each pose and FOV. These are functional visual checks, not frame-time measurements. Shared-asset performance is measured separately by `make bench-viewer`.

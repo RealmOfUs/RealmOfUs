@@ -1,9 +1,17 @@
-"""Create a deterministic synthetic preview using verified calibration assets, without Blender."""
+"""Create a deterministic synthetic preview using verified assets, without Blender.
+
+By default three calibration models are placed ``--count`` times. ``--unique N``
+derives N byte-distinct GLB variants (identical geometry and textures, a tagged
+``asset.generator``) so streaming sees N different SHAs; ``--lod1-only`` uses
+each source lod1 for both tiers, which keeps textured scale bundles small.
+"""
 
 import argparse
+import hashlib
 import json
 import random
 import shutil
+import struct
 import sys
 from pathlib import Path
 
@@ -12,13 +20,57 @@ sys.path.insert(0, str(ROOT))
 from toolchain.build.native import ffi_library, load_core, validate_bundle
 
 
-def generate(source: Path, output: Path, count: int, seed: int) -> dict:
+def variant(data: bytes, index: int) -> bytes:
+    """Return a byte-distinct GLB with identical geometry and images, tagged in asset.generator."""
+    magic, version, _total, length, kind = struct.unpack_from("<5I", data, 0)
+    document = json.loads(data[20 : 20 + length])
+    generator = document.setdefault("asset", {}).get("generator", "")
+    document["asset"]["generator"] = f"{generator} scale-variant-{index:04d}".strip()
+    chunk = json.dumps(document, separators=(",", ":")).encode()
+    chunk += b" " * (-len(chunk) % 4)
+    rest = data[20 + length :]
+    header = struct.pack("<5I", magic, version, 20 + len(chunk) + len(rest), len(chunk), kind)
+    return header + chunk + rest
+
+
+def source_models(manifest: dict) -> list:
+    by_id = {entity["id"]: entity for entity in manifest["entities"]}
+    calibration = ["axis_probe", "house_0_1", "tree_00"]
+    if all(name in by_id for name in calibration):
+        return [by_id[name] for name in calibration]
+    return list(manifest["entities"])
+
+
+def generate(
+    source: Path, output: Path, count: int, seed: int, unique: int = 0, lod1_only: bool = False
+) -> dict:
     ffi_library()
     core = load_core()
     source_manifest = validate_bundle(source, core)
-    by_id = {entity["id"]: entity for entity in source_manifest["entities"]}
-    models = [by_id[name] for name in ["axis_probe", "house_0_1", "tree_00"]]
+    models = source_models(source_manifest)
     profile = core.CONFIG["profile"]
+    output.mkdir(parents=True, exist_ok=True)
+    objects = output / "objects"
+    objects.mkdir(exist_ok=True)
+    payloads = {}
+    if lod1_only:
+        models = [{**model, "asset": model["lod1"]} for model in models]
+    if unique:
+        variants = []
+        for index in range(unique):
+            base = models[index % len(models)]
+            model = dict(base)
+            for key in ["asset", "lod1"]:
+                data = variant((source.parent / base[key]["path"]).read_bytes(), index)
+                sha = hashlib.sha256(data).hexdigest()
+                model[key] = {
+                    "path": core.call("asset.path", sha),
+                    "sha256": sha,
+                    "bytes": len(data),
+                }
+                payloads[model[key]["path"]] = data
+            variants.append(model)
+        models = variants
     rng = random.Random(seed)
     entities = []
     for index in range(count):
@@ -56,17 +108,17 @@ def generate(source: Path, output: Path, count: int, seed: int) -> dict:
     # The core derives owners, offsets, profile hash and the complete spatial index.
     manifest = core.call("preview.create", {"profile": profile, "entities": entities})
     layout = core.call("viewer.catalog", manifest)
-    output.mkdir(parents=True, exist_ok=True)
-    if any(output.iterdir()):
+    if (output / "realm.json").exists():
         existing = core.read_json(output / "realm.json", "manifest.validate")
         if existing != manifest or (output / "version.json").exists():
             raise SystemExit("Output is not this generated preview; use an empty output directory")
-    objects = output / "objects"
-    objects.mkdir(exist_ok=True)
     for model in models:
         for key in ["asset", "lod1"]:
             path = model[key]["path"]
-            shutil.copyfile(source.parent / path, output / path)
+            if path in payloads:
+                (output / path).write_bytes(payloads[path])
+            else:
+                shutil.copyfile(source.parent / path, output / path)
     core.write_json(output / "realm.json", manifest)
     validate_bundle(output / "realm.json", core)
     return {
@@ -78,6 +130,8 @@ def generate(source: Path, output: Path, count: int, seed: int) -> dict:
         "occupied_chunks": len(manifest["chunks"]),
         "impostors": len(layout["impostors"]),
         "seed": seed,
+        "unique": unique,
+        "lod1_only": lod1_only,
         "source": str(source),
     }
 
@@ -88,6 +142,10 @@ def main():
     parser.add_argument("--output", type=Path)
     parser.add_argument("--count", type=int, default=800)
     parser.add_argument("--seed", type=int, default=20260922)
+    parser.add_argument(
+        "--unique", type=int, default=0, help="byte-distinct GLB variants to derive"
+    )
+    parser.add_argument("--lod1-only", action="store_true", help="use each lod1 for both tiers")
     args = parser.parse_args()
     if not args.source.is_file():
         parser.error(
@@ -96,7 +154,18 @@ def main():
     if args.count < 1:
         parser.error("--count must be positive; the core checks the catalog budget")
     output = args.output or ROOT / f"build/scale/bundle-{args.count}"
-    print(json.dumps(generate(args.source.resolve(), output.resolve(), args.count, args.seed)))
+    print(
+        json.dumps(
+            generate(
+                args.source.resolve(),
+                output.resolve(),
+                args.count,
+                args.seed,
+                unique=args.unique,
+                lod1_only=args.lod1_only,
+            )
+        )
+    )
 
 
 if __name__ == "__main__":

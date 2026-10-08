@@ -10,7 +10,7 @@ M3 implements separate parsing safety ceilings and advisory build references, fu
 | Rust | `make test` | 91 tests including doc tests, of which 29 are CLI Git/LFS regressions; distinct full/lod1 SHA publication and retired-format diagnostics covered | 2026-10-07 |
 | Spatial, ABI and streaming | `make test` | 77 spatial vectors, 113 Godot ABI assertions, 12 Rust viewer tests, 97 headless streaming assertions, 12 grid observations and the expected isolated worker-error recovery probe | 2026-10-07 |
 | C ABI | C smoke command in `toolchain/README.md`, linked to `rou/target/release` | ABI 2, success/error envelopes and buffer release pass | 2026-10-07 |
-| Displayed shared-asset performance | `make bench-viewer` | 3255 focused frames; mount P95 11.193 ms, steady P95 13.760 ms; peak/final RSS 451.89/276.50 MiB. Measured on mains power before the per-entity `desired` map was removed from the query response; a re-measurement of the committed code is pending | 2026-10-07 |
+| Displayed shared-asset performance | `make bench-viewer` | Two mains-powered runs of the committed code, 3143 and 3167 focused frames: mount P95 11.824 and 12.201 ms, steady P95 11.480 and 10.952 ms; peak/final RSS 388.97/281.42 and 400.61/291.23 MiB | 2026-10-07 |
 | Displayed streaming | `client/tests/streaming_contract.gd` with Metal Forward+ | 69 assertions; distinct full/lod1 hashes, replacement, shared-hash reuse, cancellation, expiry and independent missing-tier failures | 2026-10-01 |
 | Git/LFS with real Blender and Godot | `make test` | 41 flow checks, 62 commands, 154 Godot checks; all four calibration models retain identical full/lod1 hashes, unchanged from the preceding round | 2026-10-07 |
 | Blender extension | `make test-addon` | 46 instancing checks, 46 geometry/material/UV/texture/source-preservation LOD checks, plus 10 + 42 + 62 checks for local preview, authoring session and actual installation | 2026-10-07 |
@@ -21,6 +21,8 @@ M3 implements separate parsing safety ceilings and advisory build references, fu
 | Standalone viewer | `make viewer`, then packaged headless runtime with empty authoring PATH | macOS arm64 export under ABI 2 succeeds; fixed external Git version opens and imports four assets, with no rejected SHA or engine errors | 2026-10-07 |
 | High-detail realm rebuild | `rou build`, `rou validate --staged`, `rou view --worktree --all` in the existing sample | All three models regenerated and validated; lod1 image edges at most 1024 pixels, full textures unchanged; matching material names and unchanged source hashes; a subsequent build reuses all three models | 2026-10-07 |
 | High-detail display | `make test-detailed-display` | 64 assertions, six focused near/middle screenshots, six distinct SHAs; middle images at most 1024 pixels; zero released scenes/prototypes, rejected assets or engine errors | 2026-10-07 |
+| Catalog-size refresh cost | `client/tests/refresh_cost.gd` on `examples/scale/make_bundle.py --count N` bundles | Headless `refresh_assets()` P95 grows linearly from 4.3 ms at 800 entities to 30.7 ms at the 4096-entity catalog budget; see Scale measurements | 2026-10-07 |
+| Unique textured assets | `make_bundle.py --unique 16/64/128 --lod1-only` from the detailed sample, then `benchmark_viewer.py --flight --balanced` | Peak RSS 625 / 898 / 882 MiB; the 128-asset flight imports 56 of 128 in 30 s with two workers; see Scale measurements | 2026-10-07 |
 | GLB fuzzing | `cargo +nightly fuzz run glb_precheck -- -max_total_time=60` | 12,417,341 iterations in 61 seconds; no crash or timeout. The default 4096-byte input limit does not exercise large JSON chunks | 2026-10-06 |
 | GLB JSON chunk boundary and memory | Rust contract tests and separate-process FFI probes | Valid 8 MiB JSON chunk accepted; 8 MiB + 4 bytes, 32, 64 and 128 MiB rejected before parsing with `GLB_JSON_BYTES`; rejected cases add 32 KiB to the pre-call peak RSS | 2026-10-06 |
 
@@ -42,8 +44,10 @@ Acceptance uses **balanced** rendering (SDFGI disabled), with the normal renderi
 | 2026-10-01 before refresh optimisation: repeat | 2522 / 2522 | 808 / 16.114 ms | 1714 / 14.097 ms | 389.88 / 306.81 MiB |
 | 2026-10-01 after refresh optimisation | 2588 / 2588 | 809 / 14.380 ms | 1779 / 13.636 ms | 397.84 / 313.58 MiB |
 | 2026-10-07 core tier scheduling (ABI 2), before dropping the `desired` map | 3255 / 3255 | 808 / 11.193 ms | 2447 / 13.760 ms | 451.89 / 276.50 MiB |
+| 2026-10-07 committed code, mains power, run 1 | 3143 / 3143 | 808 / 11.824 ms | 2335 / 11.480 ms | 388.97 / 281.42 MiB |
+| 2026-10-07 committed code, mains power, run 2 | 3167 / 3167 | 808 / 12.201 ms | 2359 / 10.952 ms | 400.61 / 291.23 MiB |
 
-The 2026-10-07 run passes the 33 ms mount and 16.7 ms steady targets, and the tighter M3 mount regression reference of 14.8 ms. Against the handoff reference of 13.029/12.230 ms, mount/steady P95 changed by -1.836/+1.530 ms, within the specified 2 ms local-variation allowance. This single run does not establish a speedup. It predates the removal of the per-entity `desired` map, which only reduces per-refresh work (query responses return to 174 bytes when nothing is in range and 31 KB at the world center for 800 entities, matching the previous build); the committed code has not yet been re-measured on an idle machine, so the row above is retained as the latest valid foreground measurement rather than a measurement of this commit. Peak RSS is 75.89 MiB above the rounded 376 MiB handoff reference; final RSS is 33.50 MiB below its 310 MiB reference. It ends with zero scenes and prototypes, but does not repeat the multi-cycle memory experiment. Main-thread scene-generation P95 is 20.566 ms across three scenes.
+All three 2026-10-07 runs pass the 33 ms mount and 16.7 ms steady targets and the tighter M3 mount regression reference of 14.8 ms. The two runs of the committed code were taken back to back on an idle machine on mains power; same-session alternation against the previous commit gave 11.300 and 11.697 ms mount P95 for that build, so the viewer-tier round changes mount-frame cost by less than the 2 ms local-variation allowance. On battery the same build measured 16.4-17.0 ms mount P95 across five runs and fails the 14.8 ms reference, which is why acceptance is defined on mains power. Removing the per-entity `desired` map returned query responses to 174 bytes when nothing is in range and 31 KB at the world center for 800 entities, matching the previous build. Peak RSS is 13-25 MiB above the rounded 376 MiB handoff reference; final RSS is 19-29 MiB below its 310 MiB reference. Runs end with zero scenes and prototypes, but do not repeat the multi-cycle memory experiment. Main-thread scene-generation P95 was 24.130 and 13.131 ms across three scenes. Peak RSS is 75.89 MiB above the rounded 376 MiB handoff reference; final RSS is 33.50 MiB below its 310 MiB reference. It ends with zero scenes and prototypes, but does not repeat the multi-cycle memory experiment. Main-thread scene-generation P95 is 20.566 ms across three scenes.
 
 The 2026-10-01 post-optimisation run also passed those frame targets; its preceding two runs exceeded the tighter reference and are retained above. A same-session headless CPU probe identified extra refresh work: loaded refresh P95 was 6.643 ms for the committed M2 control, 7.754 ms before the M3 optimisation and 6.038 ms after it. The fix skips failure reconciliation when no asset has failed and avoids adding every retained scene to the visible-box set only to remove it again. The ABI 2 query preserves those properties; only a failure-driven detach requests a second core visibility calculation. This probe isolates bookkeeping; it is not a rendering benchmark or proof of the entire frame-time difference. The 2026-10-01 final main-thread scene-generation P95 was 19.024 ms across three scenes. An earlier unfocused flight is excluded from acceptance; a displayed M2 control failed to obtain focus and supplies no frame-time comparison.
 
@@ -75,6 +79,35 @@ The detailed-flight performance numbers below remain from 2026-10-01 and use ear
 The final detailed flight uses the same balanced preset, viewport and default radii as the shared-asset flight. All 3028 frames retain focus. It records 10 mount/unload frames (P95 **71.554 ms**) and 3018 steady frames (P95 **13.072 ms**), with peak/final RSS **1374.59 / 402.78 MiB**. Eight worker preparations and eight scene generations cover six distinct SHAs as tiers change and expired prototypes are reloaded; nine instances mount and unload, with zero final scenes, cached prototypes or asset failures. Worker preparation P95 is 2234.442 ms and main-thread scene generation P95 is 40.866 ms. The small mount-frame count makes its P95 sensitive to individual stalls. An initial flight lost focus and is excluded from foreground acceptance.
 
 This is a measured M4 baseline, **not a 33 ms mount-budget pass for large assets**. Main-thread materialisation and texture upload still cause visible stalls despite background preparation. No renderer quality, reference warning or safety ceiling was lowered to hide them.
+
+## Scale measurements
+
+These are the first M4 numbers: synthetic bundles, one machine, mains power, the committed viewer-tier code. They describe where the current design stops being comfortable; they do not set limits, and nothing was tuned to improve them.
+
+**Catalog size.** `examples/scale/make_bundle.py --count N` places N instances of the three calibration models (three shared GLBs, so this isolates catalog bookkeeping from asset cost). `client/tests/refresh_cost.gd` measures one `refresh_assets()` on the main thread, P95 over 30 rounds, at the world center (every entity inside the middle radius) and far from everything (nothing to load; the response is 174 bytes).
+
+| Entities | Query at center | Refresh at center | Response | Query far | Refresh far |
+| --- | --- | --- | --- | --- | --- |
+| 800 | 3.34 ms | 4.33 ms | 31 KB | 2.83 ms | 3.09 ms |
+| 1600 | 7.70 ms | 9.81 ms | 63 KB | 6.86 ms | 7.38 ms |
+| 2400 | 12.27 ms | 16.59 ms | 94 KB | 11.47 ms | 12.18 ms |
+| 3200 | 18.55 ms | 24.84 ms | 125 KB | 16.80 ms | 17.92 ms |
+| 4096 | 23.59 ms | 30.70 ms | 160 KB | 21.87 ms | 23.33 ms |
+
+Cost is linear in catalog size, about 7.5 ms per thousand entities at the center and 5.7 ms far away, and most of it is the core's per-entity distance pass rather than response conversion: the far case returns 174 bytes and still costs 21.9 ms at 4096 entities. Every 0.35 s refresh exceeds one 60 Hz frame above roughly 2400 entities at the center and 3000 entities far away. `WORLD_RECORDS` therefore marks where a single catalog already stalls once per refresh, not a comfortable per-realm size. The query walks all entities although the core holds a chunk index; restricting the pass to chunks within the far radius is the obvious follow-up and was not attempted here.
+
+**Unique textured assets.** `make_bundle.py --unique U --lod1-only` derives U byte-distinct GLBs from the detailed sample's lod1 assets (identical geometry and 1024-pixel textures, a tagged `asset.generator`, 6.35-8.94 MiB and 9.68-12.00 MiB decoded each) and places each once. The standard 30-second balanced flight then mounts as many as it reaches.
+
+| Unique assets | Imports in 30 s | Cancelled | Worker P95 | Mount P95 | Steady P95 | Peak / final RSS |
+| --- | --- | --- | --- | --- | --- | --- |
+| 3 (800 shared instances, reference) | 800 | 0 | - | 12.2 ms | 11.0 ms | 401 / 291 MiB |
+| 16 | 16 | 0 | 285 ms | 39.0 ms | 9.6 ms | 625 / 297 MiB |
+| 64 | 64 | 0 | 393 ms | 19.7 ms | 10.6 ms | 898 / 352 MiB |
+| 128 | 56 | 72 | 1065 ms | 28.3 ms | 14.9 ms | 882 / 414 MiB |
+
+Two walls appear. Resident memory grows by roughly 8-15 MiB per unique textured lod1 asset, so peak RSS reaches 0.9 GiB with about 60 such assets resident, and a 4K-textured full asset costs an order of magnitude more (192-238 MiB decoded each, see the high-detail sample). Import throughput is bounded by two worker tasks at about one second per textured GLB: the 128-asset flight imports fewer than half of them in 30 seconds, the rest stay as boxes and are cancelled when the camera moves on, and worker P95 passes one second. Mount-frame P95 with few mount frames (19 and 63) is dominated by individual stalls and is not comparable with the 800-frame shared-asset runs. The design question M4 raises is density, not totals: how many unique textured assets fall inside the 200 m middle radius at once, which no per-realm constant controls today.
+
+**Storage.** One revision of the three-model detailed sample puts 390 MiB into LFS (sources 119.5 MiB, full assets 247.2 MiB, lod1 23.7 MiB), that is 91-158 MiB per model per revision, against 400 KiB for the whole four-model calibration garden. Because re-exports are not byte-reproducible (Known limits), every rebuild of an unchanged model adds another object: after the rebuilds of this validation session the sample's local `.git/lfs` holds 941 MiB, including four distinct 65.30 MiB objects for one unchanged full asset. Texture bytes dominate; lod1 is 9 percent of the full asset after resampling.
 
 ## Hosting
 
