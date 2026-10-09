@@ -1,5 +1,5 @@
 //! Human-readable presentation of host reports; machine reports are serialized unchanged.
-use crate::{Command, Sparse};
+use crate::{Command, Release, Sparse};
 use rou_git::{Repository, Result};
 use serde_json::Value;
 use std::fmt::Write;
@@ -26,6 +26,12 @@ pub fn kind(command: &Command) -> &'static str {
         Command::Merge { .. } | Command::Pull { .. } => "merge",
         Command::Push { .. } => "push",
         Command::View { .. } => "view",
+        Command::Release {
+            action: Release::Create { .. },
+        } => "release",
+        Command::Release {
+            action: Release::List,
+        } => "release_list",
         Command::Diff(_) => "diff",
         Command::Native(_) => "native",
     }
@@ -193,6 +199,35 @@ pub fn render(kind: &str, value: &Value) -> String {
             "Realm: published {} with required LFS history\n",
             string(&value["commit"])
         ),
+        "release" => {
+            let mut text = format!(
+                "Created browse tag {} at {} (view root {})\nNothing was pushed. Publish with: rou push --follow-tags\n",
+                string(&value["tag"]),
+                string(&value["commit_oid"]),
+                string(&value["view_root_sha256"])
+            );
+            if let Some(address) = value["address"].as_str() {
+                writeln!(text, "Share after publishing: {address}").unwrap();
+            }
+            text
+        }
+        "release_list" => {
+            let mut text = String::new();
+            for release in array(value) {
+                writeln!(
+                    text,
+                    "{} {} {}",
+                    string(&release["tag"]),
+                    string(&release["commit_oid"]),
+                    string(&release["view_root_sha256"])
+                )
+                .unwrap();
+            }
+            if text.is_empty() {
+                text.push_str("No browse releases\n");
+            }
+            text
+        }
         "diff" => domain_diff(value),
         _ => unreachable!("missing human report for {kind}"),
     };

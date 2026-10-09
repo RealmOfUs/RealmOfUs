@@ -11,9 +11,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def run(realm: Path, output: Path, activate: bool) -> dict:
+def run(realm: Path, output: Path, activate: bool, url: str | None = None) -> dict:
     """Run the real display harness; engine errors and unfocused captures are fatal."""
-    if not realm.is_file():
+    if not url and not realm.is_file():
         default = ROOT / "build/scale/detailed/.rou/view/worktree/realm.json"
         if realm != default:
             raise FileNotFoundError(realm)
@@ -34,7 +34,10 @@ def run(realm: Path, output: Path, activate: bool) -> dict:
         "--script",
         "../tests/detailed_display.gd",
         "--",
-        "--realm=" + str(realm),
+        ("--url=" + url) if url else ("--realm=" + str(realm)),
+        # The online variant keeps its download cache under the output directory
+        # instead of the real user cache.
+        *(["--cache=" + str(output / "cache")] if url else []),
         "--capture-dir=" + str(output),
         "--no-recent",
         "--balanced",
@@ -49,13 +52,16 @@ def run(realm: Path, output: Path, activate: bool) -> dict:
                     f"$.NSRunningApplication.runningApplicationWithProcessIdentifier({proc.pid})"
                     ".activateWithOptions(3);"
                 )
-                subprocess.run(
-                    ["/usr/bin/osascript", "-l", "JavaScript", "-e", script],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                    check=True,
-                )
+                activation_deadline = time.monotonic() + 10
+                while proc.poll() is None and time.monotonic() < activation_deadline:
+                    subprocess.run(
+                        ["/usr/bin/osascript", "-l", "JavaScript", "-e", script],
+                        capture_output=True,
+                        text=True,
+                        timeout=10,
+                        check=True,
+                    )
+                    time.sleep(0.5)
             proc.wait(timeout=180)
         finally:
             if proc.poll() is None:
@@ -94,9 +100,10 @@ def main():
         "--realm", type=Path, default=ROOT / "build/scale/detailed/.rou/view/worktree/realm.json"
     )
     parser.add_argument("--output", type=Path, default=ROOT / "build/scale/detailed-display")
+    parser.add_argument("--url", help="Open the detailed sample from an online viewer address")
     parser.add_argument("--activate", action="store_true", help="Activate the measured macOS PID")
     args = parser.parse_args()
-    run(args.realm.resolve(), args.output.resolve(), args.activate)
+    run(args.realm.resolve(), args.output.resolve(), args.activate, args.url)
 
 
 if __name__ == "__main__":

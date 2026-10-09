@@ -20,6 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from toolchain.build import native  # noqa: E402
 from toolchain.build.verify_git_realm import Acceptance  # noqa: E402
+from toolchain.build.verify_online_viewer import verify as verify_online_viewer  # noqa: E402
 
 CREDENTIALS = ROOT / ".cache/forgejo/credentials.json"
 
@@ -102,7 +103,8 @@ def merge_pull_request(
         "POST",
         {"Do": "merge", "merge_message_field": f"Merge {head}"},
     )
-    acceptance.check(f"platform merged without local rebuild: {title}", status == 200)
+    detail = "" if status == 200 else f" (HTTP {status}: {str(body)[:200]})"
+    acceptance.check(f"platform merged without local rebuild: {title}{detail}", status == 200)
     return current
 
 
@@ -205,6 +207,55 @@ def main() -> None:
         view["included"] == 4 if "included" in view else view["entity_count"] == 4,
     )
 
+    release = acceptance.rou(alice, "release", "create", "v1")
+    expected_address = f"rou://{urllib.parse.urlsplit(forgejo.url).netloc}/{forgejo.repo}@v1"
+    acceptance.check(
+        "browse tag binds the merged commit and derives the viewer address without pushing",
+        release["ok"]
+        and release["commit_oid"] == merged
+        and release["address"] == expected_address
+        and acceptance.git(alice, "ls-remote", "--tags", "origin", "v1") == "",
+    )
+    retried = acceptance.rou(alice, "release", "create", "v1")
+    acceptance.check(
+        "browse tag creation is idempotent for a matching tag",
+        retried["commit_oid"] == merged
+        and retried["view_root_sha256"] == release["view_root_sha256"],
+    )
+    listed = acceptance.rou(alice, "release", "list")
+    acceptance.check(
+        "release list reports the view-root annotation",
+        listed
+        == [
+            {
+                "tag": "v1",
+                "commit_oid": merged,
+                "view_root_sha256": release["view_root_sha256"],
+            }
+        ],
+    )
+    # Publishing is explicit: the validated branch, its LFS objects and reachable annotated tags.
+    acceptance.rou(alice, "push", "--follow-tags")
+    # An annotated tag advertises its tag object under refs/tags/<tag>; the commit is
+    # only on the peeled refs/tags/<tag>^{} line.
+    acceptance.check(
+        "tag published explicitly with git push",
+        merged in acceptance.git(alice, "ls-remote", "--tags", "origin", "v1^{}"),
+    )
+    acceptance.git(alice, "tag", "-a", "ordinary", "-m", "No browse annotation", merged)
+    acceptance.git(alice, "push", "origin", "ordinary")
+    acceptance.check(
+        "newer ordinary annotated tag exists for browse discovery filtering",
+        merged in acceptance.git(alice, "ls-remote", "--tags", "origin", "ordinary^{}"),
+    )
+    online = verify_online_viewer(release["address"], base / "merged-view", base / "online-viewer")
+    acceptance.check(
+        "standalone viewer opens hosted and static sources with verified cache recovery",
+        online["second_downloaded_bytes"] == 0
+        and online["commit_oid"] == merged
+        and online["view_root_sha256"] == release["view_root_sha256"],
+    )
+
     anonymous = base / "anonymous"
     acceptance.rou(base, "clone", forgejo.remote(None), str(anonymous))
     acceptance.rou(anonymous, "sparse", "set", "--entity", "bench")
@@ -243,6 +294,7 @@ def main() -> None:
                 "commands": len(acceptance.commands),
                 "initial": first,
                 "merged": merged,
+                "online": online,
             },
             indent=2,
         )

@@ -27,6 +27,8 @@
 //! | Name | Input | Result / rules |
 //! | --- | --- | --- |
 //! | `id.validate` / `path.safe` | JSON string | Original string after validation |
+//! | `url.parse` | `rou://host/owner/repository[@tag]` or HTTP(S) `realm.json` URL | Validated repository or static source |
+//! | `release.annotation` | `{view_root_sha256}` or `{message}` | Create or parse the annotated-tag `view-root:` binding |
 //! | `asset.path` | SHA-256 JSON string | `objects/<sha256>.glb` |
 //! | `asset.match` | `{asset: Asset, actual: Descriptor}` | `true` when descriptors match |
 //! | `record.validate` | `{path, kind, id}`, kind is `model` or `entity` | `true` when the filename matches |
@@ -40,6 +42,7 @@
 //! | `texture.match` | `{texture, actual, metrics}` | Exact identity and extension check |
 //! | `glb.textures` | `{metrics, textures, images}` | Exact URI-set and aggregate decoded-image validation |
 //! | `world.metadata` | [`World`] | `true` after metadata validation, without requiring cold input descriptors |
+//! | `tree.bundle` | `{commit_oid, git_object_format?, documents: {path: text}, inputs: {path: descriptor}}` from a tagged Git tree | `{root, pages, version, view_root_sha256, catalog_sha256, entity_count, model_count}`: the same browse bundle `rou view --all` writes |
 //! | `preview.create` | `{profile, entities}`; entities have id, optional label, position_mm, bounds_mm, asset, lod1, textures | `{root, pages}` with exact root-bound page strings |
 //! | `build.validate` | `{profile, model, inputs, record}` | Record after [`Build::validate`] |
 //! | `build.input_digest` | `{profile, model, inputs}` | [`input_digest`] string |
@@ -74,7 +77,7 @@
 use crate::{
     Error, Result, blender,
     documents::*,
-    formats, glb, image, json, lfs, limits, paths,
+    formats, glb, image, json, lfs, limits, online, paths,
     spatial::{Bounds, Profile},
     world::{self, World},
 };
@@ -178,6 +181,13 @@ struct Diff {
 struct Session {
     world: World,
     source: String,
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
+enum ReleaseAnnotation {
+    Create { view_root_sha256: String },
+    Parse { annotation: String },
 }
 
 #[derive(Deserialize)]
@@ -317,6 +327,19 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
             paths::safe(&value)?;
             json!(value)
         }
+        "url.parse" => {
+            let value: String = json::parse(input)?;
+            serde_json::to_value(online::parse_source(&value)?)?
+        }
+        "release.annotation" => match json::parse(input)? {
+            ReleaseAnnotation::Create { view_root_sha256 } => json!({
+                "annotation": online::release_annotation(&view_root_sha256)?,
+                "view_root_sha256": view_root_sha256
+            }),
+            ReleaseAnnotation::Parse { annotation } => json!({
+                "view_root_sha256": online::parse_release_annotation(&annotation)?
+            }),
+        },
         "record.validate" => {
             let request: RecordPath = json::parse(input)?;
             let directory = match request.kind.as_str() {
@@ -336,6 +359,131 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
             let value: Realm = json::parse(input)?;
             value.validate()?;
             serde_json::to_value(value)?
+        }
+        "tree.bundle" => {
+            #[derive(Deserialize)]
+            #[serde(deny_unknown_fields)]
+            struct Request {
+                commit_oid: String,
+                #[serde(default = "default_object_format")]
+                git_object_format: String,
+                documents: BTreeMap<String, String>,
+                inputs: BTreeMap<String, Descriptor>,
+            }
+            fn default_object_format() -> String {
+                "sha1".into()
+            }
+            // A viewer reads a whole tagged tree; its archive budget bounds the request.
+            let request: Request =
+                json::from_value(json::strict_with_limit(input, limits::ARCHIVE_BYTES)?)?;
+            let realm = request
+                .documents
+                .get(paths::REALM)
+                .ok_or_else(|| Error::new("missing_realm", "tree has no realm.json"))?;
+            let mut world = World {
+                realm: json::parse(realm.as_bytes())?,
+                models: BTreeMap::new(),
+                entities: BTreeMap::new(),
+                inputs: BTreeMap::new(),
+            };
+            let mut records = BTreeMap::new();
+            for (path, text) in &request.documents {
+                if path == paths::REALM {
+                    continue;
+                }
+                crate::error::require(
+                    path.ends_with(".json"),
+                    "unsafe_path",
+                    "tree documents must be JSON records",
+                )?;
+                if path.starts_with(paths::MODELS) {
+                    let model: Model = json::parse(text.as_bytes())?;
+                    crate::error::require(
+                        !world.models.contains_key(&model.id),
+                        "duplicate_id",
+                        "duplicate model ID",
+                    )?;
+                    crate::world::record_id(path, paths::MODELS, &model.id)?;
+                    let inputs = model
+                        .input_paths()
+                        .into_iter()
+                        .map(|input| {
+                            request
+                                .inputs
+                                .get(&input)
+                                .cloned()
+                                .ok_or_else(|| {
+                                    Error::new("missing_input", format!("tree lacks input {input}"))
+                                })
+                                .map(|descriptor| (input, descriptor))
+                        })
+                        .collect::<Result<Inputs>>()?;
+                    world.inputs.insert(model.id.clone(), inputs);
+                    world.models.insert(model.id.clone(), model);
+                } else if path.starts_with(paths::ENTITIES) {
+                    let entity: Entity = json::parse(text.as_bytes())?;
+                    crate::error::require(
+                        !world.entities.contains_key(&entity.id),
+                        "duplicate_id",
+                        "duplicate entity ID",
+                    )?;
+                    crate::world::record_id(path, paths::ENTITIES, &entity.id)?;
+                    world.entities.insert(entity.id.clone(), entity);
+                } else if path.starts_with(paths::RUNTIME) {
+                    let record: Build = json::parse(text.as_bytes())?;
+                    crate::world::record_id(path, paths::RUNTIME, &record.model)?;
+                    records.insert(record.model.clone(), record);
+                } else {
+                    return Err(Error::new("unsafe_path", "unexpected tree document path"));
+                }
+            }
+            world.validate()?;
+            for (id, record) in &records {
+                let model = world
+                    .models
+                    .get(id)
+                    .ok_or_else(|| Error::new("invalid_builds", "record without a model"))?;
+                record.validate(&world.realm.profile, model, &world.inputs[id])?;
+                // Runtime pointers in the tree must describe exactly the recorded outputs.
+                let payloads = [&record.asset, &record.lod1]
+                    .into_iter()
+                    .map(|asset| (asset.path.clone(), asset.descriptor()))
+                    .chain(
+                        record
+                            .textures
+                            .iter()
+                            .map(|texture| (texture.path.clone(), texture.descriptor())),
+                    );
+                for (path, descriptor) in payloads {
+                    crate::error::require(
+                        request.inputs.get(&path) == Some(&descriptor),
+                        "stale_runtime",
+                        format!("runtime pointer differs from build record: {path}"),
+                    )?;
+                }
+            }
+            let view = world.projections(&records)?;
+            let bundle = view.manifest()?.bundle()?;
+            let catalog = json::pretty(&bundle.root)?;
+            let version = Version {
+                format: formats::GIT_VIEW.into(),
+                realm_id: world.realm.id.clone(),
+                git_object_format: request.git_object_format,
+                commit_oid: request.commit_oid,
+                view_root_sha256: view.root_hash()?,
+                catalog_sha256: json::digest(&catalog),
+                validation: "local-trusted".into(),
+            };
+            version.validate(&catalog)?;
+            json!({
+                "root": String::from_utf8(catalog).map_err(|_| Error::new("invalid_json", "catalog is not UTF-8"))?,
+                "pages": bundle.pages,
+                "version": String::from_utf8(json::pretty(&version)?).map_err(|_| Error::new("invalid_json", "version is not UTF-8"))?,
+                "view_root_sha256": version.view_root_sha256,
+                "catalog_sha256": version.catalog_sha256,
+                "entity_count": world.entities.len(),
+                "model_count": world.models.len()
+            })
         }
         "world.metadata" => {
             let value: World = json::parse(input)?;
@@ -588,6 +736,7 @@ pub fn dispatch(op: &str, input: &[u8]) -> Result<Vec<u8>> {
                     "glb_json_bytes": limits::GLB_JSON_BYTES,
                     "file_bytes": limits::FILE_BYTES,
                     "pointer_bytes": limits::POINTER_BYTES,
+                    "archive_bytes": limits::ARCHIVE_BYTES,
                     "vertices": limits::VERTICES,
                     "indices": limits::INDICES,
                     "nodes": limits::NODES,

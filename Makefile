@@ -96,7 +96,7 @@ test-addon: addon ## Blender extension, material-preserving LOD export and real 
 	  $(BLENDER) --background --factory-startup --python-exit-code 1 --python toolchain/tests/blender/verify_addon_install.py -- --addon-zip "$(ROOT)/$(ADDON)" --output "$(ROOT)/build/addon-install"
 
 test-detailed-display: rou godot-ext ## Capture focused full/lod1 images and verify detailed-asset release
-	$(PYTHON) toolchain/build/verify_detailed_display.py $(if $(filter macos,$(PLATFORM)),--activate,)
+	$(PYTHON) toolchain/build/verify_detailed_display.py $(if $(DETAILED_URL),--url "$(DETAILED_URL)",) $(if $(filter macos,$(PLATFORM)),--activate,)
 
 bench-viewer: godot-ext ffi ## Display an 800-entity streaming flight for 30 seconds
 	test -f build/s1-2.1/preview/realm.json || $(BLENDER) --background --factory-startup --python-exit-code 1 --python examples/calibration/create_scene.py
@@ -116,7 +116,7 @@ forgejo-reset: ## Stop Forgejo and delete its data volume and local credentials
 	$(COMPOSE) down -v
 	rm -rf .cache/forgejo
 
-test-forgejo: rou ## Two-author flow over HTTP against the local Forgejo (needs make forgejo-up)
+test-forgejo: rou viewer ## Two-author and standalone online-viewer flow against local Forgejo
 	$(PYTHON) toolchain/build/verify_forgejo.py
 
 fuzz: ## Run the three libFuzzer targets for 60 s each (needs nightly and cargo-fuzz)

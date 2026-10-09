@@ -102,6 +102,10 @@ Reads and hash/budget validation run in background workers, deduplicated by asse
 
 Only public realms: no asset encryption, world passwords or content keys. Hashes validate bytes, signatures identify publishers, transport uses standard secure channels. Public reading needs no platform login; write access, maintenance authority, peer identity and local administration are verified separately.
 
+The M5 reader path now satisfies the no-login part for published worlds. A maintainer creates an annotated Git tag and pushes it; another person can open `rou://host/owner/repository@tag` in the standalone viewer, which downloads the tagged tree as an archive, derives and validates the browse catalog with the same core rou uses, and fetches anonymous LFS objects. A complete browse bundle on any static HTTP server is the equivalent fallback. The viewer materialises and validates the ordinary bundle in its cache, so Git, LFS and Blender are not installed or invoked on the reader's machine.
+
+This transport authenticates content hashes, not people. The address, tag annotation and view root show which bytes the host published under that repository name, but do not prove a publisher's identity or maintenance authority. Signed release records remain S2 work, and independent nodes, replica discovery and P2P transport remain later work.
+
 Git OIDs record their algorithm explicitly; LFS and view roots use SHA-256. A release record is created after the commit and binds realm identity, fork governance identity, commit and view root, avoiding cycles. A clone grants no upstream write authority; signing a view root does not change Git's object algorithm.
 
 Metadata travels through Git or a bridge; heavy assets attach P2P behind the LFS transfer or node interface. Signaling exchanges connection information and TURN relays when direct connectivity fails. Source discovery, session identity binding, resume, quotas, pins and source switching are accepted separately. A node only serves ranges explicitly enabled for sharing; drafts and caches are never public by default.

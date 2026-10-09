@@ -13,6 +13,7 @@ var completed: Dictionary = {}
 var pending_scan: Dictionary = {}
 var scan_root := ""
 var parse_in_worker := DisplayServer.get_name() != "headless"
+var remote_source: RefCounted
 
 
 static func failure(code: String, message: String) -> Dictionary:
@@ -138,7 +139,7 @@ func _scan(root: String, assets: Dictionary) -> void:
 	var errors: Dictionary = {}
 	for sha: String in assets:
 		var error := _availability(root, assets[sha])
-		if not error.is_empty():
+		if not error.is_empty() and (remote_source == null or error.code != MISSING_ASSET):
 			errors[sha] = error
 	_publish("availability", {"errors": errors})
 
@@ -157,6 +158,10 @@ func _import(root: String, asset: Dictionary) -> void:
 
 
 func _read_asset(root: String, asset: Dictionary) -> Dictionary:
+	if remote_source != null:
+		var downloaded: Dictionary = remote_source.materialize_asset(asset)
+		if not downloaded.is_empty():
+			return downloaded
 	var error := _availability(root, asset)
 	if not error.is_empty():
 		return error

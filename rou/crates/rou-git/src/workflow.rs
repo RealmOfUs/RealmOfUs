@@ -217,13 +217,16 @@ impl Repository {
         let target = self.resolve("FETCH_HEAD")?;
         self.merge(Some(&target), true, false)
     }
-    /// Validate and push a fixed commit OID with its complete reachable LFS history.
+    /// Validate and push a fixed commit OID with the LFS payloads its new commits introduce;
+    /// a remote that lacks the history receives all of it. `follow_tags` is Git's own
+    /// `--follow-tags`: annotated tags reachable from the pushed commit that the remote lacks.
     /// Restore missing historical payloads if needed; setting upstream does not change the fixed refspec.
     pub fn push(
         &self,
         remote: Option<&str>,
         branch: Option<&str>,
         upstream: bool,
+        follow_tags: bool,
     ) -> Result<Value> {
         let remote = remote.map(str::to_owned).unwrap_or(self.default_remote()?);
         ensure!(
@@ -239,12 +242,15 @@ impl Repository {
         self.run(["check-ref-format", &format!("refs/heads/{branch}")])?;
         let target = self.resolve(&format!("refs/heads/{branch}"))?;
         self.validate(Mode::Commit(target.clone()), true)?;
+        // Standard LFS semantics: upload the objects introduced by commits the remote does
+        // not have yet, so the enumeration grows with the change rather than the history.
+        // A remote without the history receives all of it; an object missing locally is an
+        // error, repaired below from the default remote before retrying.
         let upload = [
             "-c",
             "lfs.allowincompletepush=false",
             "lfs",
             "push",
-            "--all",
             &remote,
             &target,
         ];
@@ -260,13 +266,13 @@ impl Repository {
             self.run(["lfs", "fetch", "--all", &self.default_remote()?, &target])?;
             self.run_visible(upload)?;
         }
-        let output = self.run_visible([
-            "-c",
-            "lfs.allowincompletepush=false",
-            "push",
-            &remote,
-            &format!("{target}:refs/heads/{branch}"),
-        ])?;
+        let refspec = format!("{target}:refs/heads/{branch}");
+        let mut arguments = vec!["-c", "lfs.allowincompletepush=false", "push"];
+        if follow_tags {
+            arguments.push("--follow-tags");
+        }
+        arguments.extend([remote.as_str(), refspec.as_str()]);
+        let output = self.run_visible(arguments)?;
         if upstream {
             self.run(["config", &format!("branch.{branch}.remote"), &remote])?;
             self.run([
@@ -275,7 +281,11 @@ impl Repository {
                 &format!("refs/heads/{branch}"),
             ])?;
         }
-        Ok(json!({"commit":target,"git_output":String::from_utf8_lossy(&output)}))
+        Ok(json!({
+            "commit": target,
+            "follow_tags": follow_tags,
+            "git_output": String::from_utf8_lossy(&output),
+        }))
     }
     /// Compute a semantic world diff for optional staged/revision selectors without changing files.
     pub fn domain_diff(&self, args: &[OsString]) -> Result<Value> {

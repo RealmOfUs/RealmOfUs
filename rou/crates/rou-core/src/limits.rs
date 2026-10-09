@@ -16,6 +16,8 @@ pub const GLB_JSON_BYTES: usize = 8 * 1024 * 1024;
 pub const FILE_BYTES: u64 = 1024 * 1024 * 1024;
 /// Safety: maximum text bytes recognized as a Git LFS pointer.
 pub const POINTER_BYTES: usize = 1024;
+/// Safety: maximum bytes of a tagged-tree archive or tree-bundle request read by a viewer (64 MiB).
+pub const ARCHIVE_BYTES: usize = 64 * 1024 * 1024;
 /// Safety: maximum sum of primitive POSITION accessor counts in one GLB.
 pub const VERTICES: u64 = 16_777_216;
 /// Safety: maximum total indices in one GLB and maximum count of a single accessor.

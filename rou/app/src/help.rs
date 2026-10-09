@@ -280,7 +280,8 @@ Explicit divergent integration:
 pub const PUSH: &str = "Validate the tip of a local branch, upload its required reachable LFS \
     payloads, then push that exact commit to the same branch name on REMOTE. If \
     required LFS history is missing locally, try obtaining it from the configured \
-    default remote before retrying the upload.\n\n\
+    default remote before retrying the upload. --follow-tags is Git's own option: annotated \
+    tags reachable from the pushed commit that REMOTE lacks go along, lightweight tags do not.\n\n\
     REMOTE defaults to the current branch's configured remote, falling back to origin. \
     BRANCH defaults to the current local branch. BRANCH is a local branch name, \
     not a refspec; force push and arbitrary Git push options are not supported here. \
@@ -288,7 +289,8 @@ pub const PUSH: &str = "Validate the tip of a local branch, upload its required 
 pub const PUSH_EXAMPLES: &str = "Examples:
   rou push
   rou push -u origin main
-  rou push origin feature/roof";
+  rou push origin feature/roof
+  rou push --follow-tags";
 
 pub const VIEW: &str = "Export a fixed committed Realm (default: HEAD) as a standalone browse \
     bundle. --worktree explicitly exports an already-built working draft instead; \
@@ -312,3 +314,14 @@ pub const VIEW_EXAMPLES: &str = "Examples:
   rou view --entity house
   rou build
   rou view --worktree --output .rou/view/draft";
+
+pub const RELEASE_CREATE: &str = "Validate HEAD and create a local annotated Git tag whose \
+    message binds the browse view root. Nothing is pushed or uploaded: publish explicitly with \
+    rou push --follow-tags (branch, LFS objects and the tag). Viewers derive the browse \
+    catalog from the tagged tree and fetch GLBs and images anonymously from LFS. Repeating the \
+    command verifies that an existing tag selects the same commit and view root.";
+pub const RELEASE_CREATE_EXAMPLES: &str = "Examples:
+  rou release create v1
+  rou push --follow-tags";
+pub const RELEASE_LIST: &str = "List local annotated Git tags containing one valid view-root \
+    binding. Lightweight tags and ordinary annotated tags are omitted.";

@@ -45,6 +45,7 @@ pub mod image;
 pub mod json;
 pub mod lfs;
 pub mod limits;
+pub mod online;
 pub mod ops;
 pub mod paging;
 pub mod paths;

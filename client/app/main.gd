@@ -6,6 +6,7 @@ const Core = preload("core.gd")
 const LocalCatalog = preload("local_catalog.gd")
 const Loader = preload("loader.gd")
 const Impostors = preload("impostors.gd")
+const RemoteSource = preload("remote_source.gd")
 const MAX_MOUNTS_PER_FRAME := 1
 const MAX_IDLE_PROTOTYPES := 4
 const PROTOTYPE_IDLE_SECONDS := 5.0
@@ -44,7 +45,13 @@ var rejected: Dictionary = {}
 var rejection_codes: Dictionary = {}
 var prototypes: Dictionary = {}
 var loader: RefCounted
+var remote_source: RefCounted
+var remote_info: Dictionary = {}
+var remote_lod1_ready: Dictionary = {}
+var remote_lod1_phase := false
+var remote_retrying := false
 var retired_loaders: Array[RefCounted] = []
+var retired_remote_sources: Array[RefCounted] = []
 var impostors: MultiMeshInstance3D
 var asset_ids: Dictionary = {}
 var asset_failures: Dictionary = {}
@@ -75,6 +82,8 @@ var age := 0.0
 var refresh_clock := 0.0
 var recent_clock := 0.0
 var first_ready := -1.0
+var first_ready_downloaded_bytes := -1
+var first_ready_object_downloaded_bytes := -1
 var first_presented := -1.0
 var frame_times: Array[float] = []
 var import_times: Array[float] = []
@@ -115,8 +124,11 @@ func _ready() -> void:
 	last_tick = started_at
 	if DisplayServer.get_name() != "headless":
 		DisplayServer.window_move_to_foreground()
+	var url: String = options.get("url", "")
 	var path: String = options.get("realm", "")
-	if not path.is_empty():
+	if not url.is_empty():
+		open_url(url)
+	elif not path.is_empty():
 		open_realm(path, options.get("commit", ""))
 
 	else:
@@ -135,6 +147,21 @@ func open_realm(path: String, ref: String = "") -> bool:
 	if result.has("error"):
 		fail(result.error)
 		return false
+	retire_remote_source()
+	remote_info.clear()
+	remote_retrying = false
+	return _activate_realm(result)
+
+
+func _open_realm(path: String, ref: String = "") -> bool:
+	var result := LocalCatalog.read(path, ref)
+	if result.has("error"):
+		fail(result.error)
+		return false
+	return _activate_realm(result)
+
+
+func _activate_realm(result: Dictionary) -> bool:
 	var initial: Dictionary = result.layout.start
 	var identity: String = result.repository.get("realm_id", "")
 	var recent := read_recent()
@@ -165,6 +192,8 @@ func open_realm(path: String, ref: String = "") -> bool:
 	total_chunks = known_chunks.size()
 	current_version = repository_info.get("commit_oid", "")
 	loader = Loader.new()
+	loader.remote_source = remote_source
+	remote_lod1_phase = remote_source != null
 	# Initialize the shared stateless adapter before any worker calls it.
 	Core.config()
 	impostors = Impostors.new()
@@ -176,6 +205,38 @@ func open_realm(path: String, ref: String = "") -> bool:
 	world_ui.opened()
 	realm_opened.emit()
 	return true
+
+
+func open_url(address: String) -> void:
+	address = address.strip_edges()
+	if address.is_empty():
+		fail("Enter a rou:// address or an HTTP realm.json URL")
+		return
+	var candidate: RefCounted = RemoteSource.new()
+	candidate.cache_base = options.get("cache", "user://cache")
+	var started: Dictionary = candidate.start(address)
+	if not started.is_empty():
+		fail(started.error)
+		return
+	retire_remote_source()
+	clear_realm()
+	remote_source = candidate
+	remote_info.clear()
+	remote_retrying = false
+	status_label.text = "Opening online world..."
+
+
+func retire_remote_source() -> void:
+	if remote_source != null:
+		retired_remote_sources.append(remote_source)
+		remote_source = null
+
+
+func reload_world() -> void:
+	if remote_source != null and not remote_source.source_address.is_empty():
+		open_url(remote_source.source_address)
+	elif not realm_path.is_empty():
+		open_realm(realm_path)
 
 
 func clear_realm() -> void:
@@ -201,6 +262,8 @@ func clear_realm() -> void:
 	asset_ids.clear()
 	asset_failures.clear()
 	asset_observations.clear()
+	remote_lod1_ready.clear()
+	remote_lod1_phase = false
 	mesh_instances.clear()
 	detail_levels.clear()
 	near_ids.clear()
@@ -242,6 +305,8 @@ func clear_realm() -> void:
 	cancellations = 0
 	selected_chunks = 0
 	first_ready = -1
+	first_ready_downloaded_bytes = -1
+	first_ready_object_downloaded_bytes = -1
 	first_presented = -1
 	focused_frames = 0
 	unfocused_frames = 0
@@ -266,6 +331,20 @@ func fail(message: String) -> void:
 	error_dialog.dialog_text = message
 	if not options.has("benchmark"):
 		error_dialog.popup_centered()
+	if options.has("exit-on-error"):
+		exit_after_error.call_deferred(message)
+
+
+func exit_after_error(message: String) -> void:
+	var report := {
+		"error": message, "network": remote_source.stats() if remote_source != null else {}
+	}
+	if options.has("report"):
+		var file := FileAccess.open(options.report, FileAccess.WRITE)
+		if file != null:
+			file.store_string(JSON.stringify(report, "  ") + "\n")
+	print("VIEWER_ERROR ", JSON.stringify(report))
+	get_tree().quit(2)
 
 
 func read_recent() -> Dictionary:
@@ -390,15 +469,25 @@ func query_pages() -> Dictionary:
 	while response.ok:
 		var added := false
 		for key: String in response.value.missing_pages:
-			if loaded_pages.has(key) or page_errors.has(key):
+			if (
+				loaded_pages.has(key)
+				or page_errors.has(key)
+				or (remote_source != null and remote_source.page_pending(key))
+			):
 				continue
 			var raw := LocalCatalog.page(asset_root, manifest.chunks[key])
 			if raw.has("error"):
-				page_errors[key] = raw.error
+				if remote_source != null:
+					remote_source.request_page(key, manifest.chunks[key])
+				else:
+					page_errors[key] = raw.error
 				continue
 			var decoded := native_catalog.load_page(key, raw.bytes)
 			if not decoded.ok:
-				page_errors[key] = Core.message(decoded)
+				if remote_source != null:
+					remote_source.request_page(key, manifest.chunks[key])
+				else:
+					page_errors[key] = Core.message(decoded)
 				continue
 			loaded_pages[key] = true
 			page_owners[key] = decoded.value.page.foreign
@@ -466,7 +555,7 @@ func refresh_assets() -> void:
 			cancellations += 1
 	queue.clear()
 	for id: String in needed:
-		if not rejected.has(id):
+		if not rejected.has(id) and not asset_failures.has(desired_asset(id).sha256):
 			queue.append(id)
 	for id: String in loaded:
 		apply_detail(id)
@@ -493,6 +582,13 @@ func apply_detail(id: String) -> void:
 func desired_asset(id: String) -> Dictionary:
 	# The core decides the tier (with hysteresis); the host only maps it to a descriptor.
 	var tier := "asset" if near_ids.has(id) else "lod1"
+	if (
+		remote_source != null
+		and tier == "asset"
+		and catalog[id].asset.sha256 != catalog[id].lod1.sha256
+		and (remote_lod1_phase or not remote_lod1_ready.has(id))
+	):
+		tier = "lod1"
 	var asset: Dictionary = catalog[id][tier].duplicate()
 	asset.textures = catalog[id].textures[tier]
 	return asset
@@ -520,6 +616,10 @@ func sync_asset_failure(id: String) -> void:
 			rejection_codes.erase(id)
 			impostors.clear_error(id)
 		return
+	if remote_source != null and loaded.has(id) and loaded_assets[id] != desired_asset(id).sha256:
+		# A failed replacement tier must not discard the validated tier already on screen.
+		queue.erase(id)
+		return
 	rejected[id] = failure.error
 	rejection_codes[id] = failure.code
 	impostors.reject(id, failure.error, failure.code)
@@ -538,7 +638,53 @@ func reject_asset(sha: String, failure: Dictionary) -> void:
 
 
 func streaming_busy() -> bool:
-	return not queue.is_empty() or (loader != null and not loader.tasks.is_empty())
+	return (
+		not queue.is_empty()
+		or (loader != null and not loader.tasks.is_empty())
+		or (remote_source != null and not remote_source.tasks.is_empty())
+	)
+
+
+func presentation_ready() -> bool:
+	if remote_source == null:
+		return not streaming_busy()
+	for task_key: String in remote_source.tasks:
+		if task_key.begins_with("page:"):
+			return false
+	for id: String in tiers.near + tiers.mid:
+		if not loaded.has(id) and not rejected.has(id):
+			return false
+	return not catalog.is_empty()
+
+
+func pump_remote() -> void:
+	if remote_source == null:
+		return
+	for result: Dictionary in remote_source.take_completed():
+		if result.key == "bootstrap":
+			if result.has("error"):
+				fail(result.error)
+				continue
+			remote_source.activate(result)
+			remote_info = result.duplicate(true)
+			if not _open_realm(result.manifest, result.commit_oid):
+				if result.get("cached_bootstrap", false) and not remote_retrying:
+					remote_retrying = true
+					var restarted: Dictionary = remote_source.start(
+						remote_source.source_address, true
+					)
+					if not restarted.is_empty():
+						fail(restarted.error)
+				continue
+			remote_retrying = false
+			continue
+		if result.key.begins_with("page:"):
+			var key: String = result.key.trim_prefix("page:")
+			if result.has("error"):
+				page_errors[key] = result.error
+			else:
+				page_errors.erase(key)
+				refresh_assets.call_deferred()
 
 
 func prune_prototypes() -> void:
@@ -569,6 +715,10 @@ func pump_streaming() -> void:
 		retired.discard_completed()
 		if retired.drained():
 			retired_loaders.erase(retired)
+	for source: RefCounted in retired_remote_sources.duplicate():
+		source.take_completed()
+		if source.tasks.is_empty():
+			retired_remote_sources.erase(source)
 	if loader == null:
 		return
 	for result: Dictionary in loader.take_completed():
@@ -639,6 +789,8 @@ func mount_asset(id: String) -> void:
 	world.add_child(scene)
 	loaded[id] = scene
 	loaded_assets[id] = sha
+	if remote_source != null and sha == catalog[id].lod1.sha256:
+		remote_lod1_ready[id] = true
 	asset_observations[sha].mounts += 1
 	mesh_instances[id] = scene.find_children("*", "GeometryInstance3D", true, false)
 	if scene is GeometryInstance3D:
@@ -741,13 +893,23 @@ func _process(delta: float) -> void:
 	recording_frames = true
 	residency_changed = false
 	last_tick = now
+	pump_remote()
 	if not pump_scheduled:
 		pump_scheduled = true
 		pump_streaming.call_deferred()
 	if manifest.is_empty():
 		return
-	if not streaming_busy() and first_ready < 0:
+	if presentation_ready() and first_ready < 0:
 		first_ready = age
+		first_ready_downloaded_bytes = (
+			remote_source.stats().downloaded_bytes if remote_source != null else 0
+		)
+		first_ready_object_downloaded_bytes = (
+			remote_source.stats().object_downloaded_bytes if remote_source != null else 0
+		)
+		if remote_lod1_phase:
+			remote_lod1_phase = false
+			refresh_assets.call_deferred()
 		if DisplayServer.get_name() != "headless":
 			announce_ready.call_deferred(open_serial)
 	var direction := Vector3.ZERO
@@ -808,6 +970,18 @@ func _process(delta: float) -> void:
 			loader.tasks.size()
 		]
 	)
+	if remote_source != null:
+		var network: Dictionary = remote_source.stats()
+		diagnostic.text += (
+			"\nSource %s%s\nDownloaded %d bytes / cache hits %d / in flight %d bytes"
+			% [
+				network.source,
+				(" @" + str(network.tag)) if not str(network.tag).is_empty() else "",
+				network.downloaded_bytes,
+				network.cache_hits,
+				network.in_flight_bytes
+			]
+		)
 	if not world_ui.selection.is_empty() and catalog.has(world_ui.selection):
 		var id: String = world_ui.selection
 		var asset: Dictionary = desired_asset(id)
@@ -845,6 +1019,11 @@ func _exit_tree() -> void:
 	for retired: RefCounted in retired_loaders:
 		retired.shutdown()
 	retired_loaders.clear()
+	if remote_source != null:
+		remote_source.shutdown()
+	for source: RefCounted in retired_remote_sources:
+		source.shutdown()
+	retired_remote_sources.clear()
 	for prototype: Dictionary in prototypes.values():
 		Loader.dispose(prototype)
 	prototypes.clear()
@@ -1019,6 +1198,8 @@ func finish_report() -> void:
 		"view_validation": repository_info.get("validation", "unversioned"),
 		"seconds": age,
 		"first_ready_seconds": first_ready,
+		"first_ready_downloaded_bytes": first_ready_downloaded_bytes,
+		"first_ready_object_downloaded_bytes": first_ready_object_downloaded_bytes,
 		"first_presented_seconds": first_presented,
 		"user_data_dir": OS.get_user_data_dir(),
 		"frames": frame_times.size(),
@@ -1038,6 +1219,7 @@ func finish_report() -> void:
 		"cached_prototypes": prototypes.size(),
 		"loaded_assets": loaded_assets,
 		"asset_failures": asset_failures,
+		"page_errors": page_errors,
 		"asset_observations": asset_observations,
 		"import_ms_p95": percentile(import_times, .95),
 		"mount_ms_p95": percentile(mount_times, .95),
@@ -1054,6 +1236,9 @@ func finish_report() -> void:
 		[get_viewport().get_texture().get_width(), get_viewport().get_texture().get_height()],
 		"visual_preset": "daylight" if not warm else "dusk",
 		"asset_imports": asset_imports,
+		"network": remote_source.stats() if remote_source != null else {},
+		"cache_layout_error":
+		LocalCatalog.check_layout(realm_path) if not realm_path.is_empty() else "",
 		"ssil": environment.ssil_enabled,
 		"sdfgi": environment.sdfgi_enabled,
 		"render_scale": get_viewport().scaling_3d_scale,

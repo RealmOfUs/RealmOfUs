@@ -1017,6 +1017,29 @@ fn sparse_clone_can_push_to_same_origin_without_expanding_cone() {
 }
 
 #[test]
+fn push_follow_tags_publishes_reachable_annotated_tags_only() {
+    let f = Fixture::new();
+    f.seed();
+    let remote = f.remote();
+    let clone = f.clone_realm(&remote, "author");
+    let head = f.git(&clone, &["rev-parse", "HEAD"]);
+    let head = String::from_utf8_lossy(&head).trim().to_string();
+    let release = f.rou(&clone, &["release", "create", "v1"]);
+    assert_eq!(release["commit_oid"].as_str(), Some(head.as_str()));
+    f.git(&clone, &["tag", "light"]);
+    // A plain push never sends tags, exactly like git push.
+    f.rou(&clone, &["push"]);
+    assert!(f.git(&remote, &["tag", "-l"]).is_empty());
+    // Git's --follow-tags: reachable annotated tags go along, lightweight ones do not.
+    let pushed = f.rou(&clone, &["push", "--follow-tags"]);
+    assert_eq!(pushed["follow_tags"], true);
+    let tagged = f.git(&remote, &["rev-parse", "refs/tags/v1^{}"]);
+    assert_eq!(String::from_utf8_lossy(&tagged).trim(), head);
+    let tags = f.git(&remote, &["tag", "-l"]);
+    assert_eq!(String::from_utf8_lossy(&tags).trim(), "v1");
+}
+
+#[test]
 fn repository_routing_environment_cannot_replace_validated_index() {
     let f = Fixture::new();
     f.seed();
@@ -1701,4 +1724,88 @@ fn shared_textures_deduplicate_survive_deletion_and_repair_from_lfs_history() {
             .unwrap()
             .contains(&value!(texture.path))
     );
+}
+
+fn collect_tree(
+    root: &Path,
+    relative: &str,
+    documents: &mut std::collections::BTreeMap<String, String>,
+    inputs: &mut std::collections::BTreeMap<String, rou_core::documents::Descriptor>,
+) {
+    for entry in fs::read_dir(root.join(relative)).unwrap() {
+        let entry = entry.unwrap();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let path = if relative.is_empty() {
+            name.clone()
+        } else {
+            format!("{relative}/{name}")
+        };
+        if entry.file_type().unwrap().is_dir() {
+            if ["realm", "runtime", "sources"].contains(&path.as_str())
+                || path.starts_with("realm/")
+                || path.starts_with("sources/")
+            {
+                collect_tree(root, &path, documents, inputs);
+            }
+            continue;
+        }
+        let bytes = fs::read(entry.path()).unwrap();
+        let is_document = path == "realm.json"
+            || (path.starts_with("realm/") && path.ends_with(".json"))
+            || (path.starts_with("runtime/") && path.ends_with(".json"));
+        if is_document {
+            documents.insert(path, String::from_utf8(bytes).unwrap());
+        } else if path.starts_with("sources/") || path.starts_with("runtime/") {
+            // A forge archive carries LFS pointers; a worktree carries bytes. Both describe the payload.
+            let descriptor = rou_core::lfs::pointer(&bytes)
+                .unwrap()
+                .unwrap_or_else(|| rou_core::documents::Descriptor::of(&bytes));
+            inputs.insert(path, descriptor);
+        }
+    }
+}
+
+#[test]
+fn tree_bundle_reproduces_rou_view_byte_for_byte() {
+    let f = Fixture::new();
+    f.seed();
+    let output = f._temp.path().join("published");
+    f.rou(
+        &f.root,
+        &["view", "--all", "--output", output.to_str().unwrap()],
+    );
+    let version: Value =
+        serde_json::from_slice(&fs::read(output.join("version.json")).unwrap()).unwrap();
+    let mut documents = std::collections::BTreeMap::new();
+    let mut inputs = std::collections::BTreeMap::new();
+    collect_tree(&f.root, "", &mut documents, &mut inputs);
+    let request = serde_json::json!({
+        "commit_oid": version["commit_oid"],
+        "git_object_format": version["git_object_format"],
+        "documents": documents,
+        "inputs": inputs,
+    });
+    let derived: Value = serde_json::from_slice(
+        &rou_core::ops::dispatch("tree.bundle", &serde_json::to_vec(&request).unwrap()).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        derived["root"].as_str().unwrap().as_bytes(),
+        fs::read(output.join("realm.json")).unwrap()
+    );
+    assert_eq!(derived["view_root_sha256"], version["view_root_sha256"]);
+    assert_eq!(derived["catalog_sha256"], version["catalog_sha256"]);
+    let pages = derived["pages"].as_object().unwrap();
+    let written: Vec<_> = fs::read_dir(output.join("chunks"))
+        .unwrap()
+        .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+        .collect();
+    assert_eq!(pages.len(), written.len());
+    for (path, text) in pages {
+        assert_eq!(
+            text.as_str().unwrap().as_bytes(),
+            fs::read(output.join(path)).unwrap(),
+            "page {path} differs"
+        );
+    }
 }

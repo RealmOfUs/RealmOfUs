@@ -103,6 +103,18 @@ func run() -> void:
 	viewer.options["no-recent"] = "true"
 	viewer.options["balanced"] = "true"
 	root.add_child(viewer)
+	var open_deadline := Time.get_ticks_msec() + 180000
+	while viewer.manifest.is_empty() and viewer.last_error.is_empty():
+		if Time.get_ticks_msec() >= open_deadline:
+			check(false, "Online detailed sample opens within three minutes")
+			break
+		await process_frame
+	if viewer.remote_source != null:
+		while (viewer.first_ready < 0 or viewer.streaming_busy()) and viewer.last_error.is_empty():
+			if Time.get_ticks_msec() >= open_deadline:
+				check(false, "Online detailed sample finishes initial streaming")
+				break
+			await process_frame
 	viewer.set_process(false)
 	viewer.file_dialog.hide()
 	check(viewer.catalog.size() == 3, "Detailed sample contains three models")
@@ -154,6 +166,7 @@ func run() -> void:
 		"cached_prototypes": viewer.prototypes.size(),
 		"rejected": viewer.rejected.duplicate(),
 		"asset_failures": viewer.asset_failures.duplicate(),
+		"network": viewer.remote_source.stats() if viewer.remote_source != null else {},
 		"godot": Engine.get_version_info().string,
 		"renderer": RenderingServer.get_current_rendering_method(),
 		"viewport": [root.get_texture().get_width(), root.get_texture().get_height()],

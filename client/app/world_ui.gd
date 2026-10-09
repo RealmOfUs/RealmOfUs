@@ -18,6 +18,7 @@ var selection := ""
 var summary: Label
 var radius_inputs: Array[SpinBox] = []
 var settings_status: Label
+var address_input: LineEdit
 
 
 func setup(viewer: Node3D) -> void:
@@ -37,10 +38,16 @@ func setup(viewer: Node3D) -> void:
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	top.add_child(spacer)
-	host.open_button = host.button("Open world\u2026", top)
+	address_input = LineEdit.new()
+	address_input.custom_minimum_size.x = 430
+	address_input.placeholder_text = "rou://host/owner/repository@tag"
+	address_input.text_submitted.connect(func(text): host.open_url(text))
+	top.add_child(address_input)
+	host.button("Open address", top).pressed.connect(func(): host.open_url(address_input.text))
+	host.open_button = host.button("Open folder\u2026", top)
 	host.open_button.pressed.connect(host.choose_realm)
 	host.reload_button = host.button("Reload", top)
-	host.reload_button.pressed.connect(func(): host.open_realm(host.realm_path))
+	host.reload_button.pressed.connect(host.reload_world)
 	host.button("Overview", top).pressed.connect(host.overview)
 	host.button("Recent location", top).pressed.connect(host.resume_location)
 	host.button("Day / dusk", top).pressed.connect(func(): host.set_time(not host.warm))
@@ -201,6 +208,13 @@ func opened() -> void:
 				host.total_chunks
 			]
 		)
+		if host.remote_source != null:
+			var source: Dictionary = host.remote_source.stats()
+			summary.text = "%s \u00b7 %s" % [source.source, commit.left(8)]
+			version_details.text += (
+				"\n\nSource\n%s\nTag %s\nCatalog %s"
+				% [source.source, source.tag, descriptor.catalog_sha256]
+			)
 	update()
 
 

@@ -10,6 +10,7 @@ pub mod init;
 pub mod io;
 pub mod lock;
 pub mod payload;
+pub mod release;
 pub mod repository;
 pub mod snapshot;
 pub mod sparse;

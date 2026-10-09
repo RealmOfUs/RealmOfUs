@@ -4,7 +4,7 @@ This walkthrough exercises the core authoring workflow with the CC0 calibration 
 
 ## 0. Prerequisites
 
-Authoring needs Git, Git LFS and Blender 4.2+ on your PATH. The viewer is a separate precompiled application: download the release for your platform and open any browse bundle. No source checkout or Godot installation is needed to use that app.
+Authoring needs Git, Git LFS and Blender 4.2+ on your PATH. The viewer is a separate precompiled application: download the release for your platform and open a local browse bundle or public `rou://`/HTTP address. No source checkout, Git, LFS, Blender or Godot installation is needed to use that app.
 
 This source-based walkthrough also uses Godot 4.7 on your PATH and builds through the Makefile:
 
@@ -116,6 +116,24 @@ rou clone http://localhost:3000/realm/garden.git reader     # anonymous: history
 ```
 
 Anonymous clones of a public repository can select regions and download LFS payloads without an account; pushing needs write access on the platform. Pull requests opened on the platform for independent contributions are mergeable there without any local rebuild, because no shared index file is committed. `make test-forgejo` runs this whole flow, including two platform-side merges and a rejected push from a non-collaborator.
+
+### Publish and share a browse release
+
+A browse release is an annotated Git tag. Create it locally from a validated `HEAD`, then publish it explicitly:
+
+```bash
+rou release create v1      # validates HEAD and tags it with its view root; nothing is pushed
+rou push --follow-tags     # publishes the branch, its LFS objects and the reachable annotated tags
+rou release list
+```
+
+`--follow-tags` is Git's own option; a plain `rou push` never sends tags, and `git push origin v1` publishes the tag alone.
+
+`rou release create` prints the address readers will use, such as `rou://localhost:3000/realm/garden@v1`, once the branch and tag are pushed. Repeating it is safe: a matching tag is verified, a conflicting one is reported.
+
+Send that address to a reader. They can paste it into the standalone viewer's address field or start the packaged application with `--url=rou://localhost:3000/realm/garden@v1`. The viewer downloads the tagged tree, derives and validates the browse catalog itself and fetches GLBs and images from LFS; it needs no reader account and does not run Git, LFS or Blender. Omitting `@v1` selects the newest tag that carries a view-root annotation.
+
+For a host without an API, export the complete bundle with `rou view HEAD --all`, serve that directory over HTTP, and share the direct `https://example.invalid/world/realm.json` URL. In this form, `version.json`, `chunks/` and `objects/` are read relative to `realm.json`.
 
 ## 5. Alice clones and selects one chunk
 

@@ -282,3 +282,78 @@ fn image_dimensions_are_bounded_before_decoded_byte_arithmetic() {
         );
     }
 }
+
+fn pretty_text<T: serde::Serialize>(value: &T) -> String {
+    String::from_utf8(json::pretty(value).unwrap()).unwrap()
+}
+
+#[test]
+fn tree_bundle_reproduces_projections_and_rejects_stale_or_missing_inputs() {
+    use rou_core::{documents::Descriptor, ops, paths};
+    use std::collections::BTreeMap;
+    let (world, records) = common::world();
+    let mut documents = BTreeMap::new();
+    documents.insert(paths::REALM.to_owned(), pretty_text(&world.realm));
+    for (id, model) in &world.models {
+        documents.insert(paths::model(id), pretty_text(model));
+    }
+    for (id, entity) in &world.entities {
+        documents.insert(paths::entity(id), pretty_text(entity));
+    }
+    for (id, record) in &records {
+        documents.insert(paths::build(id), pretty_text(record));
+    }
+    let mut inputs: BTreeMap<String, Descriptor> = BTreeMap::new();
+    for model_inputs in world.inputs.values() {
+        inputs.extend(model_inputs.clone());
+    }
+    for record in records.values() {
+        inputs.insert(record.asset.path.clone(), record.asset.descriptor());
+        inputs.insert(record.lod1.path.clone(), record.lod1.descriptor());
+        for texture in record.textures.iter() {
+            inputs.insert(texture.path.clone(), texture.descriptor());
+        }
+    }
+    let commit = "0123456789abcdef0123456789abcdef01234567";
+    let request = value!({"commit_oid": commit, "documents": documents, "inputs": inputs});
+    let dispatch = |value: &serde_json::Value| {
+        ops::dispatch("tree.bundle", &serde_json::to_vec(value).unwrap())
+    };
+    let result: serde_json::Value = serde_json::from_slice(&dispatch(&request).unwrap()).unwrap();
+    assert_eq!(
+        result["view_root_sha256"],
+        world.projections(&records).unwrap().root_hash().unwrap()
+    );
+    assert_eq!(result["entity_count"], 2);
+    // The derived root and pages form a valid bundle and the version binds the root bytes.
+    let root: serde_json::Value = serde_json::from_str(result["root"].as_str().unwrap()).unwrap();
+    ops::dispatch(
+        "bundle.validate",
+        &serde_json::to_vec(&value!({"root": root, "pages": result["pages"]})).unwrap(),
+    )
+    .unwrap();
+    let version: serde_json::Value =
+        serde_json::from_str(result["version"].as_str().unwrap()).unwrap();
+    assert_eq!(version["commit_oid"], commit);
+    assert_eq!(version["catalog_sha256"], result["catalog_sha256"]);
+    ops::dispatch(
+        "version.validate",
+        &serde_json::to_vec(&value!({"version": version, "catalog": result["root"]})).unwrap(),
+    )
+    .unwrap();
+    // A runtime pointer that no longer matches its record is stale, not silently accepted.
+    let mut stale = request.clone();
+    stale["inputs"][&records["house"].asset.path]["bytes"] = value!(1);
+    assert_eq!(dispatch(&stale).unwrap_err().code, "stale_runtime");
+    // Every declared input must be present in the tree.
+    let mut missing = request.clone();
+    missing["inputs"]
+        .as_object_mut()
+        .unwrap()
+        .remove("sources/shared/wood.png");
+    assert_eq!(dispatch(&missing).unwrap_err().code, "missing_input");
+    // Documents outside realm.json, realm/ and runtime/ are refused.
+    let mut stray = request.clone();
+    stray["documents"]["docs/notes.json"] = value!("{}");
+    assert_eq!(dispatch(&stray).unwrap_err().code, "unsafe_path");
+}

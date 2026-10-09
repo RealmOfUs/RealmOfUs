@@ -77,6 +77,19 @@ enum Sparse {
 }
 
 #[derive(Subcommand)]
+enum Release {
+    /// Validate HEAD and create a local annotated tag that binds its browse view root.
+    #[command(long_about = help::RELEASE_CREATE, after_long_help = help::RELEASE_CREATE_EXAMPLES)]
+    Create {
+        /// Annotated Git tag to create or verify.
+        tag: String,
+    },
+    /// List local annotated tags that bind a browse view root.
+    #[command(long_about = help::RELEASE_LIST, after_long_help = "Example:\n  rou release list")]
+    List,
+}
+
+#[derive(Subcommand)]
 enum Command {
     /// Create Git/LFS templates without staging or committing.
     #[command(long_about = help::INIT, after_long_help = help::INIT_EXAMPLES)]
@@ -192,6 +205,9 @@ enum Command {
         /// Record the same-name upstream after a successful push.
         #[arg(short = 'u', long = "set-upstream")]
         upstream: bool,
+        /// Also push annotated tags reachable from the pushed commit that REMOTE lacks (Git's --follow-tags).
+        #[arg(long)]
+        follow_tags: bool,
         /// Git remote [default: current branch's remote, then origin].
         remote: Option<String>,
         /// Local branch to push to the same branch name on REMOTE [default: current branch].
@@ -214,6 +230,11 @@ enum Command {
         /// Export an already-built working draft; conflicts with REVISION.
         #[arg(long, conflicts_with = "revision")]
         worktree: bool,
+    },
+    /// Create or inspect public browse releases.
+    Release {
+        #[command(subcommand)]
+        action: Release,
     },
     #[command(external_subcommand)]
     Native(Vec<OsString>),
@@ -261,6 +282,9 @@ fn run(command: Command, mut machine: bool) -> Result<Output> {
         | Command::Validate { .. }
         | Command::View { .. }
         | Command::Diff(_)
+        | Command::Release {
+            action: Release::List,
+        }
         | Command::Sparse {
             action: Sparse::List,
         } => false,
@@ -354,9 +378,12 @@ fn run(command: Command, mut machine: bool) -> Result<Output> {
         } => Output::Json(repo.pull(remote.as_deref(), branch.as_deref())?),
         Command::Push {
             upstream,
+            follow_tags,
             remote,
             branch,
-        } => Output::Json(repo.push(remote.as_deref(), branch.as_deref(), upstream)?),
+        } => {
+            Output::Json(repo.push(remote.as_deref(), branch.as_deref(), upstream, follow_tags)?)
+        }
         Command::View {
             revision,
             output,
@@ -375,6 +402,12 @@ fn run(command: Command, mut machine: bool) -> Result<Output> {
                 Output::Text(report::view(&report))
             }
         }
+        Command::Release { action } => match action {
+            Release::Create { tag } => {
+                Output::Json(serde_json::to_value(repo.release_create(&tag)?)?)
+            }
+            Release::List => Output::Json(serde_json::to_value(repo.release_list()?)?),
+        },
         Command::Diff(raw) => {
             let mut realm = false;
             let mut paths = false;
@@ -416,7 +449,8 @@ fn run(command: Command, mut machine: bool) -> Result<Output> {
                     "status",
                     "sparse-checkout",
                     "init",
-                    "clone"
+                    "clone",
+                    "release"
                 ]
                 .contains(&name),
                 "{name} is reserved; run rou {name} --help"
